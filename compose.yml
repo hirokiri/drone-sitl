@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  sitl:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        USERNAME: ${USER:-hirokiri}
+        USER_UID: 1000
+        USER_GID: 1000
+    image: drone-sitl-jazzy
+    container_name: drone_sitl_dev
+    user: "${USER:-hirokiri}"
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
+      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - .:/home/${USER:-hirokiri}/work/drone-sitl:Z
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    userns_mode: "keep-id"
+    privileged: true
+    stdin_open: true
+    tty: true
+    command: /bin/bash

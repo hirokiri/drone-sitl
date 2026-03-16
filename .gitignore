@@ -1,0 +1,18 @@
+# Flight Stacks (Cloned via setup_workspace.sh)
+PX4-Autopilot/
+ardupilot/
+
+# Build artifacts
+build/
+install/
+log/
+.pytest_cache/
+
+# OS/Editor files
+.DS_Store
+.vscode/
+*.swp
+*~
+
+# Podman/Docker logs or temporary files
+*.log
