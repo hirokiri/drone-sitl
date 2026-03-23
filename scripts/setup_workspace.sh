@@ -12,28 +12,25 @@ sudo apt-get update
 if [ ! -d "PX4-Autopilot" ]; then
     echo "Cloning PX4-Autopilot..."
     git clone https://github.com/PX4/PX4-Autopilot.git --recursive
-    
-    echo "Installing PX4 dependencies..."
-    cd PX4-Autopilot
-    bash ./Tools/setup/ubuntu.sh --no-nuttx --no-sim-tools
-    cd ..
-else
-    echo "PX4-Autopilot already cloned."
 fi
+
+echo "Installing PX4 dependencies..."
+pushd PX4-Autopilot >/dev/null
+bash ./Tools/setup/ubuntu.sh --no-nuttx --no-sim-tools
+popd >/dev/null
 
 # --- ArduPilot ---
 if [ ! -d "ardupilot" ]; then
     echo "Cloning ArduPilot..."
     git clone https://github.com/ArduPilot/ardupilot.git
-    cd ardupilot
-    git submodule update --init --recursive
-    
-    echo "Installing ArduPilot dependencies..."
-    USER=$(whoami) ./Tools/environment_install/install-prereqs-ubuntu.sh -y
-    cd ..
-else
-    echo "ardupilot already cloned."
 fi
+
+echo "Installing ArduPilot dependencies..."
+pushd ardupilot >/dev/null
+git submodule update --init --recursive
+USER=$(whoami) ./Tools/environment_install/install-prereqs-ubuntu.sh -y
+popd >/dev/null
+
 
 echo "================================================="
 echo "Setup Complete! You can now build and run SITL."

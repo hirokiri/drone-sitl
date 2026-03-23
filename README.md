@@ -96,6 +96,13 @@ make px4-sitl
 make ardupilot-sitl
 ```
 
+### Bridging to ROS 2 (PX4)
+To enable communication between PX4 and ROS 2, you must run the Micro XRCE-DDS Agent. Open a **new terminal** on your host and run:
+```bash
+make dds-agent
+```
+*Note: This must be running for ROS 2 nodes to see PX4 topics like `/fmu/out/vehicle_odometry`.*
+
 ### Accessing the Shell
 To open an interactive terminal inside the running container:
 ```bash

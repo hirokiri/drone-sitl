@@ -1,4 +1,4 @@
-.PHONY: help install-deps build start shell run reboot stop clean setup-workspace px4-sitl ardupilot-sitl
+.PHONY: help install-deps build start shell run reboot stop clean setup-workspace px4-sitl ardupilot-sitl dds-agent
 
 # --in-pod 0: disable automatic pod creation, which conflicts with userns_mode: keep-id
 COMPOSE := podman-compose --in-pod 0
@@ -50,6 +50,14 @@ setup-workspace:
 		podman exec -it drone_sitl_dev /bin/bash -c "./scripts/setup_workspace.sh"; \
 	else \
 		./scripts/setup_workspace.sh; \
+	fi
+
+dds-agent:
+	@if command -v podman >/dev/null 2>&1; then \
+		echo "Running via Podman exec..."; \
+		podman exec -it drone_sitl_dev /bin/bash -c "MicroXRCEAgent udp4 -p 8888"; \
+	else \
+		MicroXRCEAgent udp4 -p 8888; \
 	fi
 
 px4-sitl:
