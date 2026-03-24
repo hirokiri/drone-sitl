@@ -15,6 +15,7 @@ RUN curl -sSL https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/
 
 RUN apt-get update && apt-get install -y \
     gz-harmonic ros-jazzy-ros-gz ros-jazzy-actuator-msgs \
+    ros-jazzy-foxglove-bridge \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-bad gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
