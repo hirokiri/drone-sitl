@@ -103,6 +103,18 @@ make dds-agent
 ```
 *Note: This must be running for ROS 2 nodes to see PX4 topics like `/fmu/out/vehicle_odometry`.*
 
+### Remote Monitoring and Control with Foxglove Bridge
+For remote visualization and control without the Gazebo GUI, you can use Foxglove Bridge to stream ROS 2 topics over WebSockets.
+
+1. Ensure your simulation (e.g., `make px4-sitl`) and ROS 2 bridge (e.g., `make dds-agent`) are running.
+2. Open a **new terminal** and start the bridge:
+   ```bash
+   make foxglove-bridge
+   ```
+3. Open [Foxglove Studio](https://foxglove.dev/) (desktop app or browser).
+4. Open a new connection, select **Foxglove WebSocket**, and connect to `ws://localhost:8765` (or use the host's IP if connecting from an external PC).
+5. You can now visualize telemetry, 3D models, and camera streams, as well as send control commands by publishing to topics like `/cmd_vel`.
+
 ### Accessing the Shell
 To open an interactive terminal inside the running container:
 ```bash
