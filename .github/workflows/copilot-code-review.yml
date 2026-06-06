@@ -1,0 +1,27 @@
+name: Copilot Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '.gitignore'
+
+jobs:
+  copilot-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Copilot code review
+        uses: github/copilot-code-review-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
