@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Docker image updates
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "hirokiri"
+    assignees:
+      - "hirokiri"
+    commit-message:
+      prefix: "chore(docker):"
+      include: "scope"
+
+  # GitHub Actions updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "hirokiri"
+    assignees:
+      - "hirokiri"
+    commit-message:
+      prefix: "ci(actions):"
+      include: "scope"
