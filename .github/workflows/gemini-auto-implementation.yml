@@ -1,0 +1,140 @@
+name: Gemini Auto-Implementation
+
+on:
+  issues:
+    types: [assigned]
+
+jobs:
+  auto-implement:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      pull-requests: write
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Gemini CLI
+        run: |
+          pip install google-generativeai
+
+      - name: Get issue details
+        id: issue
+        run: |
+          echo "ISSUE_TITLE=${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
+          echo "ISSUE_BODY=${{ github.event.issue.body }}" >> $GITHUB_OUTPUT
+          echo "ISSUE_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+
+      - name: Generate implementation with Gemini
+        id: gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python << 'EOF'
+          import google.generativeai as genai
+          import os
+          
+          api_key = os.environ.get('GEMINI_API_KEY')
+          if not api_key:
+              raise ValueError("GEMINI_API_KEY not set")
+          
+          genai.configure(api_key=api_key)
+          model = genai.GenerativeModel('gemini-2.0-flash')
+          
+          issue_title = "${{ steps.issue.outputs.ISSUE_TITLE }}"
+          issue_body = "${{ steps.issue.outputs.ISSUE_BODY }}"
+          
+          prompt = f"""
+          You are a skilled software developer. Based on the following GitHub issue, generate implementation code.
+          
+          Issue Title: {issue_title}
+          Issue Description:
+          {issue_body}
+          
+          Please provide:
+          1. A clear implementation approach
+          2. Complete, working code
+          3. Any configuration or setup needed
+          
+          Format your response as:
+          ## Approach
+          [Your approach here]
+          
+          ## Implementation
+          [Code here]
+          
+          ## Configuration
+          [Setup steps here]
+          """
+          
+          response = model.generate_content(prompt)
+          
+          with open('gemini_output.txt', 'w') as f:
+              f.write(response.text)
+          
+          print("Generation completed successfully")
+          EOF
+
+      - name: Create draft PR
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Create a new branch
+          BRANCH_NAME="gemini-impl-issue-${{ steps.issue.outputs.ISSUE_NUMBER }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout -b "$BRANCH_NAME"
+          
+          # Read Gemini output
+          GEMINI_OUTPUT=$(cat gemini_output.txt)
+          
+          # Create implementation file
+          cat > "IMPLEMENTATION_ISSUE_${{ steps.issue.outputs.ISSUE_NUMBER }}.md" << 'IMPL_EOF'
+          # Implementation for Issue #${{ steps.issue.outputs.ISSUE_NUMBER }}
+          
+          **Issue Title:** ${{ steps.issue.outputs.ISSUE_TITLE }}
+          
+          **Generated Implementation:**
+          
+          $GEMINI_OUTPUT
+          IMPL_EOF
+          
+          git add "IMPLEMENTATION_ISSUE_${{ steps.issue.outputs.ISSUE_NUMBER }}.md"
+          git commit -m "Generated implementation for issue #${{ steps.issue.outputs.ISSUE_NUMBER }}: ${{ steps.issue.outputs.ISSUE_TITLE }}"
+          git push -u origin "$BRANCH_NAME"
+          
+          # Create draft PR
+          gh pr create \
+            --title "WIP: Implementation for issue #${{ steps.issue.outputs.ISSUE_NUMBER }} - ${{ steps.issue.outputs.ISSUE_TITLE }}" \
+            --body "This is an auto-generated draft PR from Gemini CLI.
+          
+          **Original Issue:** #${{ steps.issue.outputs.ISSUE_NUMBER }}
+          
+          **Gemini Generated Solution:**
+          
+          $GEMINI_OUTPUT
+          " \
+            --draft \
+            --base main \
+            --head "$BRANCH_NAME"
+
+      - name: Comment on issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🤖 Gemini CLI has generated an implementation! Check the draft PR for details.'
+            })
