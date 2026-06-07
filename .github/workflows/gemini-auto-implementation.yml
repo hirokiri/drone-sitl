@@ -48,8 +48,10 @@ jobs:
           genai.configure(api_key=api_key)
           model = genai.GenerativeModel('gemini-2.0-flash')
           
-          issue_title = "${{ steps.issue.outputs.ISSUE_TITLE }}"
-          issue_body = "${{ steps.issue.outputs.ISSUE_BODY }}"
+          # Use environment variables to prevent script injection
+          issue_title = os.environ.get('ISSUE_TITLE', '')
+          issue_body = os.environ.get('ISSUE_BODY', '')
+          issue_number = os.environ.get('ISSUE_NUMBER', '')
           
           prompt = f"""
           You are a skilled software developer. Based on the following GitHub issue, generate implementation code.
@@ -81,6 +83,11 @@ jobs:
           
           print("Generation completed successfully")
           EOF
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.ISSUE_TITLE }}
+          ISSUE_BODY: ${{ steps.issue.outputs.ISSUE_BODY }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.ISSUE_NUMBER }}
 
       - name: Create draft PR
         id: create-pr
