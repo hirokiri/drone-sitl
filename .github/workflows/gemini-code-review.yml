@@ -1,0 +1,59 @@
+name: Code Review with Gemini CLI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '.gitignore'
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Gemini CLI
+        run: npm install -g @google/generative-ai-cli
+
+      - name: Run Gemini code review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Get the diff of the PR
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-branch
+          git diff origin/main...pr-branch > pr.diff
+          
+          # Run Gemini CLI for code review
+          gemini-cli review --file pr.diff --output review.md
+        continue-on-error: true
+
+      - name: Comment review on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reviewFile = 'review.md';
+            if (fs.existsSync(reviewFile)) {
+              const review = fs.readFileSync(reviewFile, 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: review
+              });
+            }
