@@ -182,7 +182,7 @@ fallback binding):
 | Simulator | **Gazebo Jetty** | LTS; pairs with Lyrical via `ros-lyrical-ros-gz`. |
 | Autopilot | **PX4 SITL** | EKF2 with external-vision fusion. |
 | Perf core | **Rust** (stable) | Perception/estimation nodes via `rclrs`/`r2r`. |
-| Glue / tooling | **Python 3.13** | Orchestration, injection, analysis, launch. |
+| Glue / tooling | **Python 3.14** | Orchestration, injection, analysis, launch. |
 | Containers | **Podman** + Compose | Dev/sim runtime and the source of version truth for everything *inside* the container; see `compose.yaml` / `Containerfile`. |
 | Dev tooling | **mise** (`mise.toml`) | Provisions auxiliary dev tools (pre-commit, linters) on the host **and** in the container. Deliberately never pins python/rust. |
 | Dev conveniences (container) | `tmux`, `git`/`gh`, Claude Code CLI | Installed in the image; host `~/.ssh`, `~/.gitconfig`, credential stores and `~/.claude` are bind-mounted so they work with the host identity. |
@@ -209,16 +209,23 @@ The environment has **two layers with a deliberate boundary**:
   both for the in-container `colcon` build and for host-side `rust-analyzer`.
 - **`Makefile`** exposes the common workflow as memorable targets, e.g.
   `make build`, `make sim`, `make run`, `make test`, `make fmt`, `make clean`.
+  It runs **inside the dev container only**; on the host it stops and prints
+  how to get in.
+- **`scripts/dev.sh`** is the host-side entry point: it builds and starts the
+  container (`up`, detecting the GUI display to pass in), opens a shell
+  (`shell`), runs one command (`exec make build`), and stops it (`down`).
 - GUI apps (Gazebo, RViz) require X11/Wayland forwarding into the container;
   this is documented in the `README.md`.
 
 ## 8. Proposed repository layout
 
 ```text
-drone-sitl-2/
+drone-sitl/
 ├── AGENTS.md                # Guidance for AI/code agents working in this repo
 ├── README.md                # Quickstart & environment setup
-├── Makefile                 # Developer workflow entrypoints
+├── Makefile                 # Developer workflow entrypoints (run inside the container)
+├── scripts/
+│   └── dev.sh               # Host-side dev container control (up/shell/exec/down)
 ├── compose.yaml             # Podman Compose dev/sim environment
 ├── Containerfile            # Dev/sim image definition
 ├── mise.toml                # Dev tools (pre-commit, linters) — host + container
@@ -246,8 +253,16 @@ drone-sitl-2/
     └── models/              # Drone & sensor models
 ```
 
-> The layout is a proposal to be confirmed as components are specified; it is
-> not yet implemented.
+> The layout is a proposal to be confirmed as components are specified. So far
+> two packages exist, both launch-only scaffolds:
+> `drone_bringup` — `sim.launch.py` (starts Gazebo via `ros_gz_sim`; PX4 SITL
+> is not yet integrated) and `bringup.launch.py` (the `make run` entry point:
+> includes the simulator and is where the perception and estimation stacks get
+> composed as they land); `drone_mission` — `demo_mission.launch.py` (the
+> `make mission` entry point: brings up the stack and selects a scenario file,
+> `config/demo_mission.yaml`, the first cut of the config-driven scenario
+> format required by NFR5; the mission runner and GNSS-loss injector nodes are
+> not yet implemented).
 
 ## 9. Detailed specifications
 

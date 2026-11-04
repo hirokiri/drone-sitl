@@ -1,0 +1,27 @@
+# Demo scenario: baseline waypoint mission with a mid-flight GNSS loss.
+# Exercises AC1 (mission with GNSS healthy) and AC2 (GNSS dropped mid-mission).
+#
+# Every scenario parameter lives here, not in code (NFR5: GNSS-loss timing,
+# mission plan and seeds are reproducible from config). The schema is a first
+# cut and will be fixed in docs/specs/evaluation.md.
+scenario:
+  name: demo_gnss_loss
+  seed: 42
+
+  # FR2: arm -> takeoff -> waypoints -> land. Positions are NED metres
+  # relative to the home position; `down` is negative above ground.
+  mission:
+    takeoff_altitude_m: 20.0
+    waypoints_ned_m:
+      - [50.0, 0.0, -20.0]
+      - [50.0, 50.0, -20.0]
+      - [0.0, 50.0, -20.0]
+      - [0.0, 0.0, -20.0]
+    land_at_home: true
+
+  # G3: consumed by the GNSS-loss injector. Times are seconds after takeoff.
+  gnss_loss:
+    enabled: true
+    start_s: 30.0
+    duration_s: 40.0
+    mode: dropout # dropout | degrade

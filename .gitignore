@@ -49,3 +49,17 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# ROS 2 / colcon
+install/
+log/
+
+# Rust / cargo
+target/
+
+# mise
+.mise/
+
+# Python caches
+__pycache__/
+.pytest_cache/

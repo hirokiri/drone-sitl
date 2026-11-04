@@ -18,8 +18,8 @@ the source of truth for scope, architecture, and requirements.
 | Simulator | Gazebo Jetty |
 | Middleware | ROS 2 Lyrical |
 | Perf core | Rust (`rclrs`/`r2r`) — perception & estimation nodes |
-| Glue / tooling | Python 3.13 — orchestration, injection, analysis, launch |
-| Environment | Podman container (runtime source of truth) + `mise` for dev tools, wrapped by `Makefile` |
+| Glue / tooling | Python 3.14 — orchestration, injection, analysis, launch |
+| Environment | Podman container (runtime source of truth) + `mise` for dev tools; `scripts/dev.sh` (host) manages it, `Makefile` runs inside it |
 
 ## Language boundary (important)
 
@@ -34,8 +34,11 @@ the source of truth for scope, architecture, and requirements.
 ## Working conventions
 
 - **Build & run through the `Makefile`** (`make build`, `make sim`, `make run`,
-  `make test`) so everything happens inside the pinned container. Don't assume
-  host-installed ROS 2 / Gazebo / PX4.
+  `make test`) **inside the dev container** — the Makefile refuses to run on
+  the host. From the host, use `scripts/dev.sh exec make <target>` (or
+  `scripts/dev.sh shell`). Container lifecycle and GUI wiring live in
+  `scripts/dev.sh`, not in make. Don't assume host-installed ROS 2 / Gazebo /
+  PX4.
 - **Toolchain versions live in one place each:** the container runtime
   (Ubuntu, ROS 2, Gazebo, system Python) in `Containerfile`, the Rust version in
   `rust-toolchain.toml`, and auxiliary dev tools (pre-commit, linters) in
