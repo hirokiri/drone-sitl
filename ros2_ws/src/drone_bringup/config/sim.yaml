@@ -1,0 +1,4 @@
+# Simulation launch defaults. Scenario-level settings (GNSS-loss timing,
+# mission plan, RNG seeds) live in drone_mission config, not here.
+world: empty.sdf   # Gazebo world; replaced by sim/worlds/<name>.sdf once authored
+headless: false    # true -> run gz server only (no GUI), e.g. for CI

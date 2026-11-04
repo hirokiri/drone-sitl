@@ -18,8 +18,8 @@ the source of truth for scope, architecture, and requirements.
 | Simulator | Gazebo Jetty |
 | Middleware | ROS 2 Lyrical |
 | Perf core | Rust (`rclrs`/`r2r`) — perception & estimation nodes |
-| Glue / tooling | Python 3.13 — orchestration, injection, analysis, launch |
-| Environment | Podman container (runtime source of truth) + host `mise`, wrapped by `Makefile` |
+| Glue / tooling | Python 3.14 — orchestration, injection, analysis, launch |
+| Environment | Podman container (runtime source of truth) + `mise` for dev tools; `scripts/dev.sh` (host) manages it, `Makefile` runs inside it |
 
 ## Language boundary (important)
 
@@ -34,13 +34,21 @@ the source of truth for scope, architecture, and requirements.
 ## Working conventions
 
 - **Build & run through the `Makefile`** (`make build`, `make sim`, `make run`,
-  `make test`) so everything happens inside the pinned container. Don't assume
-  host-installed ROS 2 / Gazebo / PX4.
+  `make test`) **inside the dev container** — the Makefile refuses to run on
+  the host. From the host, use `scripts/dev.sh exec make <target>` (or
+  `scripts/dev.sh shell`). Container lifecycle and GUI wiring live in
+  `scripts/dev.sh`, not in make. Don't assume host-installed ROS 2 / Gazebo /
+  PX4.
 - **Toolchain versions live in one place each:** the container runtime
   (Ubuntu, ROS 2, Gazebo, system Python) in `Containerfile`, the Rust version in
-  `rust-toolchain.toml`, and host-only dev tools in `mise.toml`. Don't hardcode
-  versions elsewhere; update the owning file and the spec's stack table
-  together. `mise` is never run inside the container.
+  `rust-toolchain.toml`, and auxiliary dev tools (pre-commit, linters) in
+  `mise.toml`. Don't hardcode versions elsewhere; update the owning file and
+  the spec's stack table together. `mise` is available on the host and in the
+  container, but `mise.toml` must never pin python or rust.
+- **The dev container reuses host config:** `~/.ssh`, `~/.gitconfig`, git
+  credential stores and `~/.claude` are bind-mounted (see `compose.yaml`), and
+  `git`, `gh`, `tmux`, `mise` and the Claude Code CLI are installed in the
+  image.
 - **Everything crosses node boundaries as ROS 2 topics/services** so it is
   recordable (`ros2 bag`) and introspectable. No hidden side-channels.
 - **Ground-truth from the simulator is for evaluation only** — never feed it

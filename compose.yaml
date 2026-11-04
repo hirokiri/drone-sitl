@@ -1,11 +1,16 @@
 # Podman Compose — Drone SITL development & simulation environment
 #
-#   podman compose build          # build the dev image
-#   podman compose up -d dev      # start the dev container
-#   podman compose exec dev bash  # get a shell inside it
+#   scripts/dev.sh up             # build the image + start the dev container
+#   scripts/dev.sh shell          # get a shell inside it (then run `make ...`)
 #
-# GUI apps (Gazebo, RViz) need X11 access from the host. On most Linux hosts:
-#   xhost +local:  (once per session)  — see README.md for Wayland/rootless notes.
+# Prefer scripts/dev.sh over a bare `podman compose up`: it sets the GUI
+# variables below.
+#
+# GUI apps (Gazebo, RViz) use X11 (Gazebo's GUI does not work on native
+# Wayland). `scripts/dev.sh up` detects the X display and its cookie file — on a
+# Wayland desktop that is Xwayland — and passes them in (DISPLAY, XAUTH_FILE).
+# The Wayland socket is passed too (WAYLAND_SOCKET) for plain Qt tools.
+# See README.md "GUI notes".
 
 services:
   # Primary development + simulation container.
@@ -19,24 +24,77 @@ services:
     # Host networking simplifies the PX4 <-> uXRCE-DDS <-> ROS 2 traffic.
     network_mode: host
     ipc: host
+    # Expose the host GPU (DRM render nodes) so Gazebo renders with Mesa's
+    # hardware drivers instead of falling back to software (llvmpipe). Under
+    # rootless Podman the container's root maps to the host user, so the host
+    # user needs access to /dev/dri/renderD* (usually the `render` or `video`
+    # group). Remove this block on hosts without /dev/dri.
+    devices:
+      - /dev/dri:/dev/dri
     environment:
       - ROS_DISTRO=lyrical
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      # X11 forwarding for Gazebo / RViz GUIs.
+      # GUI (Gazebo / RViz) display. Qt tries the platforms in order: X11
+      # first (Gazebo's render engine needs it), via /tmp/.X11-unix plus the
+      # cookie file mounted below; then Wayland via the socket mounted below.
+      # Container-side XAUTHORITY / XDG_RUNTIME_DIR / WAYLAND_DISPLAY are set
+      # in the Containerfile. DISPLAY is exported by scripts/dev.sh (detected
+      # from Xwayland, or your shell's $DISPLAY).
       - DISPLAY=${DISPLAY:-:0}
+      - QT_QPA_PLATFORM=xcb;wayland
       - QT_X11_NO_MITSHM=1
+      # ~/.config/gh is mounted read-only; stop gh trying to write there.
+      - GH_NO_UPDATE_NOTIFIER=1
     volumes:
-      # Live-mount the repo so edits on the host are reflected inside.
-      - .:/workspace:Z
-      # X11 socket for GUI tools.
+      # Live-mount the repo so edits on the host a>re reflected inside.
+      - .:/drone-sitl:Z
+      # Wayland socket for GUI tools. WAYLAND_SOCKET is exported by scripts/dev.sh
+      # (host socket path, or empty). Under rootless Podman the container's
+      # root is the host user, so the socket is usable without any xhost-style
+      # authorisation. When empty, /dev/null is bound and Qt falls back to X11.
+      # Changing this needs the container recreated: `scripts/dev.sh down && scripts/dev.sh up`.
+      - ${WAYLAND_SOCKET:-/dev/null}:/run/user/0/wayland-0
+      # X11 socket dir and the X server's cookie file (XAUTH_FILE, exported by
+      # scripts/dev.sh: $XAUTHORITY, else Xwayland's per-session file, else
+      # ~/.Xauthority; /dev/null if none, in which case `xhost +local:` on the
+      # host is needed instead).
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # Persist Rust build/toolchain caches across container restarts.
+      - ${XAUTH_FILE:-/dev/null}:/run/host-services/Xauthority:ro
+      # Reuse the host's SSH keys/config and git identity (read-only) so that
+      # `git push`, cargo git dependencies, etc. behave inside the container
+      # exactly as on the host. The container runs as root; under rootless
+      # Podman the host user is mapped to root, so ownership/permissions match.
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      # Git credential helpers referenced from ~/.gitconfig: `gh auth
+      # git-credential` (token lives in ~/.config/gh) and `store`
+      # (~/.git-credentials). `gh` itself is installed in the image.
+      - ${HOME}/.config/gh:/root/.config/gh:ro
+      - ${HOME}/.git-credentials:/root/.git-credentials:ro
+      # Forward the host's ssh-agent (passphrase-protected / hardware keys).
+      # If no agent is running, /dev/null is bound instead and ssh silently
+      # falls back to the key files in ~/.ssh. The container-side
+      # SSH_AUTH_SOCK is set in the Containerfile, deliberately not here: see
+      # the comment there.
+      - ${SSH_AUTH_SOCK:-/dev/null}:/run/host-services/ssh-auth.sock
+      # Claude Code CLI: reuse the host's login, settings, plugins and memory.
+      # Read-write because the CLI persists session state there.
+      - ${HOME}/.claude:/root/.claude
+      - ${HOME}/.claude.json:/root/.claude.json
+      # Persist Rust build/toolchain caches and mise-installed tools
+      # (mise.toml) across container restarts.
       - drone-sitl-cargo:/root/.cargo
       - drone-sitl-rustup:/root/.rustup
-    working_dir: /workspace
+      - drone-sitl-mise:/root/.local/share/mise
+    working_dir: /drone-sitl
     # Keep the container alive for `exec`-based interactive workflows.
     command: sleep infinity
+    # Run a real init (catatonit) as PID 1 so orphaned processes get reaped.
+    # Without it `sleep` is PID 1 and every Gazebo server left behind by an
+    # interrupted launch stays in the process table as a zombie forever.
+    init: true
 
 volumes:
   drone-sitl-cargo:
   drone-sitl-rustup:
+  drone-sitl-mise:
