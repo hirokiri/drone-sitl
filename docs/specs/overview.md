@@ -1,6 +1,6 @@
 # Drone SITL — Overview Specification
 
-> **Status:** Draft v0.1 · **Last updated:** 2026-07-17
+> **Status:** Draft v0.1 · **Last updated:** 2026-11-15
 >
 > This is the top-level specification for the Drone SITL project. It defines the
 > purpose, scope, architecture, and requirements. Detailed component specs live
@@ -106,14 +106,17 @@ position and continue its mission.
 - Publishes **ground-truth pose** for evaluation only (never fed to the estimator).
 
 ### 4.2 Flight stack — PX4 SITL
-- Runs the PX4 autopilot as a host process (SITL), connected to Gazebo.
+- Runs the PX4 autopilot as a process inside the dev container (SITL),
+  attached to the Gazebo world started by `drone_bringup` (PX4 "standalone"
+  mode): PX4 spawns the vehicle model and runs against it.
 - **EKF2** performs sensor fusion. Configured to accept **external vision**
   pose (`VehicleVisualOdometry` / EV) so the visual estimate can substitute for
   GNSS.
 - Offboard control is commanded from ROS 2 for missions.
 
 ### 4.3 ROS 2 middleware — Lyrical Luth
-- `px4_msgs` + uXRCE-DDS agent bridge PX4 ↔ ROS 2.
+- `px4_msgs` + uXRCE-DDS agent bridge PX4 ↔ ROS 2: PX4's uORB topics appear
+  as `/fmu/out/*` (PX4 → ROS 2) and `/fmu/in/*` (ROS 2 → PX4).
 - All project nodes are ROS 2 nodes so they compose, record (`ros2 bag`), and
   introspect uniformly.
 
@@ -180,7 +183,8 @@ fallback binding):
 | OS (container base) | Ubuntu 26.04 LTS ("Resolute Raccoon") | Matches Lyrical/Jetty support. |
 | Middleware | **ROS 2 Lyrical Luth** | 2026 LTS (supported to May 2031). |
 | Simulator | **Gazebo Jetty** | LTS; pairs with Lyrical via `ros-lyrical-ros-gz`. |
-| Autopilot | **PX4 SITL** | EKF2 with external-vision fusion. |
+| Autopilot | **PX4 SITL** v1.17 | EKF2 with external-vision fusion. Built into the image; `px4_msgs` is pinned to the same release. |
+| PX4 ↔ ROS 2 bridge | **Micro XRCE-DDS Agent** v2.4 | Built into the image; started by `sim.launch.py`. |
 | Perf core | **Rust** (stable) | Perception/estimation nodes via `rclrs`/`r2r`. |
 | Glue / tooling | **Python 3.14** | Orchestration, injection, analysis, launch. |
 | Containers | **Podman** + Compose | Dev/sim runtime and the source of version truth for everything *inside* the container; see `compose.yaml` / `Containerfile`. |
@@ -199,8 +203,9 @@ The environment has **two layers with a deliberate boundary**:
   same pinned versions apply in both places. It **never** pins python or rust.
 - **Container — `Containerfile`** is the **authoritative runtime** and the
   single source of version truth for everything that actually runs: Ubuntu
-  26.04, ROS 2 Lyrical, Gazebo Jetty, apt packages, and the **system Python**
-  used by `rclpy`/`ament`/`colcon`. Because `mise.toml` carries no python/rust,
+  26.04, ROS 2 Lyrical, Gazebo Jetty, PX4 SITL, the Micro XRCE-DDS Agent,
+  `px4_msgs` (a prebuilt ROS 2 underlay in `/opt/px4_ros`), apt packages, and
+  the **system Python** used by `rclpy`/`ament`/`colcon`. Because `mise.toml` carries no python/rust,
   `mise` inside the container cannot shadow the interpreter ROS 2 requires.
   The image also ships developer conveniences (`tmux`, `git`, `gh`, Claude Code
   CLI) and `compose.yaml` bind-mounts the host's `~/.ssh`, `~/.gitconfig`,
@@ -208,7 +213,8 @@ The environment has **two layers with a deliberate boundary**:
 - **Rust — `rust-toolchain.toml`** pins the Rust version; `rustup` honors it
   both for the in-container `colcon` build and for host-side `rust-analyzer`.
 - **`Makefile`** exposes the common workflow as memorable targets, e.g.
-  `make build`, `make sim`, `make run`, `make test`, `make fmt`, `make clean`.
+  `make build`, `make sim`, `make run`, `make arm-check`, `make test`,
+  `make fmt`, `make clean`.
   It runs **inside the dev container only**; on the host it stops and prints
   how to get in.
 - **`scripts/dev.sh`** is the host-side entry point: it builds and starts the
@@ -256,15 +262,20 @@ drone-sitl/
 ```
 
 > The layout is a proposal to be confirmed as components are specified. So far
-> two packages exist, both launch-only scaffolds:
-> `drone_bringup` — `sim.launch.py` (starts Gazebo via `ros_gz_sim`; PX4 SITL
-> is not yet integrated) and `bringup.launch.py` (the `make run` entry point:
-> includes the simulator and is where the perception and estimation stacks get
-> composed as they land); `drone_mission` — `demo_mission.launch.py` (the
-> `make mission` entry point: brings up the stack and selects a scenario file,
-> `config/demo_mission.yaml`, the first cut of the config-driven scenario
+> two packages exist:
+> `drone_bringup` — `sim.launch.py` (starts Gazebo via `ros_gz_sim`, PX4 SITL
+> and the uXRCE-DDS agent; defaults in `config/sim.yaml`),
+> `bringup.launch.py` (the `make run` entry point: includes the simulator and
+> is where the perception and estimation stacks get composed as they land) and
+> the `arm_check` node (`make arm-check`: arms and disarms the vehicle over
+> ROS 2, the M0 acceptance check); `drone_mission` — `demo_mission.launch.py`
+> (the `make mission` entry point: brings up the stack and selects a scenario
+> file, `config/demo_mission.yaml`, the first cut of the config-driven scenario
 > format required by NFR5; the mission runner and GNSS-loss injector nodes are
 > not yet implemented).
+>
+> Until `sim/` is populated, the world and the vehicle model are PX4's own
+> (`default.sdf`, `x500`), taken from the PX4 tree in the image.
 
 ## 9. Detailed specifications
 
@@ -279,8 +290,9 @@ overview:
 
 ## 10. Milestones (indicative)
 
-1. **M0 — Environment** — Podman + Make bring up an empty ROS 2 / PX4 /
-   Gazebo stack; drone spawns and can be armed.
+1. **M0 — Environment** *(done)* — Podman + Make bring up an empty ROS 2 /
+   PX4 / Gazebo stack; drone spawns and can be armed (`make sim`, then
+   `make arm-check`).
 2. **M1 — Baseline flight** — Autonomous waypoint mission with GNSS healthy (FR1, FR2).
 3. **M2 — GNSS injection** — Controllable GNSS degradation/dropout + logging (FR3, FR7).
 4. **M3 — Visual estimate** — Offline map builder + Rust map-matcher producing a

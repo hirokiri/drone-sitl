@@ -10,9 +10,10 @@
 #
 #   make help        # list targets
 #   make build       # colcon build the ROS 2 workspace
-#   make sim         # launch Gazebo + PX4 SITL
+#   make sim         # launch Gazebo + PX4 SITL + uXRCE-DDS agent
 #   make run         # bring up the full ROS 2 stack
 #   make mission     # run a demo mission
+#   make arm-check   # arm + disarm the running sim's drone from ROS 2
 #   make stop        # stop a running sim/run/mission
 #   make test        # run tests
 #   make fmt lint    # format / lint Rust + Python
@@ -65,19 +66,21 @@ ROS_ENV = if [ -f $(WS)/install/setup.bash ]; then source $(WS)/install/setup.ba
           else echo "make $@: $(WS)/install not found; run \`make build\` first." >&2; exit 1; fi; \
           export QT_QPA_PLATFORM="$${QT_QPA_PLATFORM:-xcb;wayland}";
 
-# Gazebo allows one server per world name, so a second `make sim/run/mission`
-# only produces a cryptic "Another world of the same name is running". Refuse
-# up front and point at `make stop`.
-SIM_GUARD = if ps -eo stat=,comm= | awk '$$1 !~ /^Z/ && $$2 == "gz-sim-main" {f=1} END {exit !f}'; then \
+# Gazebo allows one server per world name and PX4 one instance, so a second
+# `make sim/run/mission` only produces cryptic errors ("Another world of the
+# same name is running", "PX4 server already running"). Refuse up front and
+# point at `make stop`.
+SIM_GUARD = if ps -eo stat=,comm= | awk '$$1 !~ /^Z/ && ($$2 == "gz-sim-main" || $$2 == "px4") {f=1} END {exit !f}'; then \
               echo "make $@: a simulator is already running (only one at a time); stop it with \`make stop\`." >&2; exit 1; fi;
 
 # Patterns anchored at the start of the command line so they cannot match the
-# shell running this recipe.
+# shell running this recipe. SIM_RE covers the simulator processes a launch
+# starts: Gazebo, PX4 SITL and the uXRCE-DDS agent.
 LAUNCH_RE = ^/usr/bin/python3 /opt/ros/[^ ]*/bin/ros2 launch
-GZ_RE     = ^/opt/ros/[^ ]*/gz-sim-
+SIM_RE    = ^(/opt/ros/[^ ]*/gz-sim-|[^ ]*/bin/px4 |MicroXRCEAgent )
 
-.PHONY: sim run mission stop
-sim: ## Launch Gazebo + PX4 SITL
+.PHONY: sim run mission arm-check stop
+sim: ## Launch Gazebo + PX4 SITL + uXRCE-DDS agent
 	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_bringup sim.launch.py
 
 run: ## Bring up the full ROS 2 stack (sim + perception + estimation)
@@ -86,12 +89,17 @@ run: ## Bring up the full ROS 2 stack (sim + perception + estimation)
 mission: ## Run a demo mission (with GNSS-loss scenario)
 	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_mission demo_mission.launch.py
 
+arm-check: ## Arm + disarm the running sim's drone from ROS 2
+	$(ROS_ENV) ros2 run drone_bringup arm_check
+
+# Interrupt the launch (it shuts its processes down), then terminate any
+# simulator process that outlived it.
 stop: ## Stop a running sim/run/mission
 	@pids=$$(pgrep -f "$(LAUNCH_RE)"); n=0; \
 	if [ -n "$$pids" ]; then n=1; kill -INT $$pids; \
 	  for i in $$(seq 15); do pgrep -f "$(LAUNCH_RE)" >/dev/null || break; sleep 1; done; fi; \
-	if pgrep -f "$(GZ_RE)" >/dev/null; then n=1; pkill -TERM -f "$(GZ_RE)"; sleep 1; fi; \
-	if pgrep -f "$(GZ_RE)" >/dev/null; then echo "make stop: simulator still running" >&2; exit 1; \
+	if pgrep -f "$(SIM_RE)" >/dev/null; then n=1; pkill -TERM -f "$(SIM_RE)"; sleep 2; fi; \
+	if pgrep -f "$(SIM_RE)" >/dev/null; then echo "make stop: simulator still running" >&2; exit 1; \
 	elif [ $$n = 1 ]; then echo "make stop: simulator stopped."; \
 	else echo "make stop: nothing was running."; fi
 

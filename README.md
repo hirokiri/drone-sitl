@@ -45,16 +45,31 @@ Everything below runs **inside the container**:
 # Build the ROS 2 workspace
 make build
 
-# Launch the simulator only (Gazebo + PX4 SITL) ...
+# Launch the simulator only (Gazebo + PX4 SITL + uXRCE-DDS agent) ...
 make sim
 # ... or the full stack, or the demo mission (each includes the simulator;
 # only one of the three can run at a time)
 make run
 make mission
 
+# With one of those running, in a second shell: arm and disarm the drone
+# from ROS 2 to check the whole chain (ROS 2 <-> PX4 <-> Gazebo)
+make arm-check
+
 # Stop whichever of those is running
 make stop
 ```
+
+`make sim` starts Gazebo with PX4's default world, spawns PX4's `x500`
+quadrotor and bridges PX4 to ROS 2 (`ros2 topic list` shows `/fmu/in/*` and
+`/fmu/out/*`). Defaults (world, model, PX4 parameter overrides) are in
+`ros2_ws/src/drone_bringup/config/sim.yaml`. PX4 flight logs (`.ulg`) are
+written to `/tmp/drone-sitl/px4/log` in the container.
+
+PX4, the uXRCE-DDS agent and `px4_msgs` are built into the image. If
+`make sim` reports that PX4 is missing, your image predates them: rebuild it
+on the host with `scripts/dev.sh down && scripts/dev.sh up` (the first build
+compiles PX4 and takes several minutes).
 
 Run `make help` to see all targets. The Makefile only runs inside the dev
 container; on the host it refuses and prints how to get in. The container

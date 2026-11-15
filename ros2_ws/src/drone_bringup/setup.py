@@ -21,5 +21,7 @@ setup(
     description="Launch files and parameters for the Drone SITL stack.",
     license="Apache-2.0",
     extras_require={"test": ["pytest"]},
-    entry_points={"console_scripts": []},
+    entry_points={
+        "console_scripts": ["arm_check = drone_bringup.arm_check:main"],
+    },
 )

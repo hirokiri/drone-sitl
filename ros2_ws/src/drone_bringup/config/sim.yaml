@@ -1,4 +1,23 @@
-# Simulation launch defaults. Scenario-level settings (GNSS-loss timing,
-# mission plan, RNG seeds) live in drone_mission config, not here.
-world: empty.sdf   # Gazebo world; replaced by sim/worlds/<name>.sdf once authored
-headless: false    # true -> run gz server only (no GUI), e.g. for CI
+# Simulation launch defaults (read by drone_bringup.sim_config; every value
+# can be overridden per run with a launch argument of the same name, e.g.
+# `ros2 launch drone_bringup sim.launch.py headless:=true`).
+# Scenario-level settings (GNSS-loss timing, mission plan, RNG seeds) live in
+# drone_mission config, not here.
+
+# Gazebo world file, resolved through GZ_SIM_RESOURCE_PATH (PX4's worlds are
+# on it) or given as a path. The file stem must equal the <world name="...">
+# inside it: PX4 attaches to the world by that name. Replaced by
+# sim/worlds/<name>.sdf once authored.
+world: default.sdf
+headless: false # true -> run gz server only (no GUI), e.g. for CI
+
+# PX4 SITL airframe / Gazebo model: gz_<model> from PX4's
+# Tools/simulation/gz/models. The camera-equipped variant comes with M3.
+model: gz_x500
+
+# PX4 parameters set at every start, on top of the airframe defaults.
+px4_params:
+  # No ground control station in this stack: the vehicle is commanded from
+  # ROS 2 over uXRCE-DDS. PX4's SITL default (2) refuses to arm without a GCS
+  # link; 0 disables the data-link-loss failsafe.
+  NAV_DLL_ACT: 0

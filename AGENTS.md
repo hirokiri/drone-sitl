@@ -34,13 +34,14 @@ the source of truth for scope, architecture, and requirements.
 ## Working conventions
 
 - **Build & run through the `Makefile`** (`make build`, `make sim`, `make run`,
-  `make test`) **inside the dev container** — the Makefile refuses to run on
+  `make arm-check`, `make test`) **inside the dev container** — the Makefile refuses to run on
   the host. From the host, use `scripts/dev.sh exec make <target>` (or
   `scripts/dev.sh shell`). Container lifecycle and GUI wiring live in
   `scripts/dev.sh`, not in make. Don't assume host-installed ROS 2 / Gazebo /
   PX4.
 - **Toolchain versions live in one place each:** the container runtime
-  (Ubuntu, ROS 2, Gazebo, system Python) in `Containerfile`, the Rust version in
+  (Ubuntu, ROS 2, Gazebo, PX4 + `px4_msgs`, uXRCE-DDS agent, system Python)
+  in `Containerfile`, the Rust version in
   `rust-toolchain.toml`, and auxiliary dev tools (pre-commit, linters) in
   `mise.toml`. Don't hardcode versions elsewhere; update the owning file and
   the spec's stack table together. `mise` is available on the host and in the

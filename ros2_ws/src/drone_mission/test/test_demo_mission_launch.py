@@ -32,7 +32,7 @@ def test_declares_scenario_world_and_headless_arguments():
         for arg in ld.entities
         if arg.__class__.__name__ == "DeclareLaunchArgument"
     }
-    assert {"scenario", "world", "headless"} <= names
+    assert {"scenario", "world", "headless", "model"} <= names
 
 
 def test_includes_the_bringup():

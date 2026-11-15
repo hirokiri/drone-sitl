@@ -14,6 +14,7 @@ scenario file, so the mission stays reproducible from config (NFR5).
 """
 
 from ament_index_python.packages import get_package_share_directory
+from drone_bringup.sim_config import declare_sim_arguments, sim_argument_names
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -22,8 +23,6 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 def generate_launch_description() -> LaunchDescription:
     scenario = LaunchConfiguration("scenario")
-    world = LaunchConfiguration("world")
-    headless = LaunchConfiguration("headless")
 
     default_scenario = PathJoinSubstitution(
         [get_package_share_directory("drone_mission"), "config", "demo_mission.yaml"]
@@ -39,21 +38,14 @@ def generate_launch_description() -> LaunchDescription:
                 default_value=default_scenario,
                 description="Scenario YAML (mission plan, GNSS-loss schedule, seed).",
             ),
-            # Pass-through simulator arguments (defaults live in sim.launch.py).
-            DeclareLaunchArgument(
-                "world",
-                default_value="empty.sdf",
-                description="Gazebo world file (name resolvable by gz, or a path).",
-            ),
-            DeclareLaunchArgument(
-                "headless",
-                default_value="false",
-                description="Run the Gazebo server only, without the GUI.",
-            ),
+            # Pass-through simulator arguments (defaults: drone_bringup sim.yaml).
+            *declare_sim_arguments(),
             # --- Full stack (sim + perception + estimation) -----------------
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(bringup_launch),
-                launch_arguments={"world": world, "headless": headless}.items(),
+                launch_arguments={
+                    name: LaunchConfiguration(name) for name in sim_argument_names()
+                }.items(),
             ),
             # --- Mission runner + GNSS-loss injector (not yet implemented) --
             LogInfo(msg=["Scenario file: ", scenario]),
