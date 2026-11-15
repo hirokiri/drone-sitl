@@ -66,6 +66,7 @@ itself is managed from the host with `scripts/dev.sh`:
 | `scripts/dev.sh shell` | open a shell in the container, starting it if needed |
 | `scripts/dev.sh exec CMD...` | run one command in it, e.g. `scripts/dev.sh exec make build` |
 | `scripts/dev.sh down` | stop and remove the container |
+| `scripts/dev.sh gui-env` | only write the detected GUI settings to `.env` (used by the VS Code dev container) |
 
 A VS Code dev container (`.devcontainer/`) works too: use its terminal.
 
@@ -107,8 +108,11 @@ desktop it runs through Xwayland.
   `$XAUTHORITY` (or `~/.Xauthority`). If neither cookie exists, run
   `xhost +local:` on the host instead (rootless Podman may need
   `xhost +SI:localuser:root`).
-- **VS Code dev container:** VS Code forwards your Wayland socket itself, so
-  GUIs work without the steps above.
+- **VS Code dev container:** `.devcontainer/devcontainer.json` runs
+  `scripts/dev.sh gui-env` on the host before creating the container. It does
+  the same detection as `up` and writes the result to a git-ignored `.env`
+  that compose reads. After logging into a new graphical session, use
+  "Dev Containers: Rebuild Container".
 - **No display at all:** `ros2 launch drone_bringup sim.launch.py
   headless:=true` runs the Gazebo server without the GUI.
 

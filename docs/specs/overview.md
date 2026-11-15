@@ -214,6 +214,8 @@ The environment has **two layers with a deliberate boundary**:
 - **`scripts/dev.sh`** is the host-side entry point: it builds and starts the
   container (`up`, detecting the GUI display to pass in), opens a shell
   (`shell`), runs one command (`exec make build`), and stops it (`down`).
+  `gui-env` writes the same GUI detection to `.env` for the VS Code dev
+  container, which runs compose itself.
 - GUI apps (Gazebo, RViz) require X11/Wayland forwarding into the container;
   this is documented in the `README.md`.
 

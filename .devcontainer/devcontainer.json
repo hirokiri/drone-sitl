@@ -16,7 +16,14 @@
 
 	// The optional 'workspaceFolder' property is the path VS Code should open by default when
 	// connected. This is typically a file mount in .devcontainer/docker-compose.yml
-	"workspaceFolder": "/${localWorkspaceFolderBasename}"
+	"workspaceFolder": "/${localWorkspaceFolderBasename}",
+
+	// Runs on the host before the container is created: detects the host's X
+	// display, its cookie file and the Wayland socket, and writes them to .env
+	// for compose.yaml (the same detection `scripts/dev.sh up` does), so Gazebo
+	// and RViz windows work. After logging into a new graphical session, use
+	// "Dev Containers: Rebuild Container" to pick up the new cookie file.
+	"initializeCommand": "scripts/dev.sh gui-env"
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
