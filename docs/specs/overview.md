@@ -268,7 +268,7 @@ drone-sitl/
 
 > The layout is a proposal to be confirmed as components are specified. So far
 > two packages exist:
-> `drone_bringup` — `sim.launch.py` (starts Gazebo via `ros_gz_sim`, PX4 SITL
+> `drone_bringup` — `sim.launch.py` (starts the Gazebo server and GUI, PX4 SITL
 > and the uXRCE-DDS agent; defaults in `config/sim.yaml`),
 > `bringup.launch.py` (the `make run` entry point: includes the simulator and
 > is where the perception and estimation stacks get composed as they land) and

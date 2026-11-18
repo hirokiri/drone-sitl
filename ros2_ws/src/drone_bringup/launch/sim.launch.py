@@ -4,10 +4,11 @@ Usage:
     ros2 launch drone_bringup sim.launch.py
     ros2 launch drone_bringup sim.launch.py headless:=true world:=default.sdf
 
-Three processes are started:
+These processes are started:
 
-* Gazebo (via ros_gz_sim), with PX4's models, worlds, system plugins and
-  server config on its search paths;
+* the Gazebo server (`gz sim -s`), with PX4's models, worlds, system plugins
+  and server config on its search paths, and, unless headless, the Gazebo
+  GUI (`gz sim -g`);
 * PX4 SITL in standalone mode: it waits for the Gazebo world, spawns the
   vehicle model into it and runs the autopilot against it;
 * the Micro XRCE-DDS agent, which exposes PX4's uORB topics to ROS 2 as
@@ -20,23 +21,30 @@ there) says where. Argument defaults come from config/sim.yaml.
 import os
 from pathlib import Path
 
-from ament_index_python.packages import get_package_share_directory
 from drone_bringup.sim_config import declare_sim_arguments, load_px4_params
 from launch import LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
     ExecuteProcess,
-    IncludeLaunchDescription,
     OpaqueFunction,
     SetEnvironmentVariable,
     Shutdown,
 )
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 PX4_BUILD = "build/px4_sitl_default"
 # UDP port PX4's uxrce_dds_client connects to (PX4 default, UXRCE_DDS_PRT).
 XRCE_AGENT_PORT = "8888"
+# The Gazebo GUI, as a process launch can stop. `gz sim -g` runs the actual
+# GUI client as a grandchild and does not pass signals on to it, so it is put
+# in a process group of its own (setsid) that the shell terminates as a whole
+# when launch signals the shell.
+GZ_GUI_CMD = [
+    "setsid",
+    "sh",
+    "-c",
+    "trap 'trap \"\" TERM; kill -TERM 0; wait; exit 0' INT TERM; gz sim -g & wait",
+]
 # PX4 keeps parameters and mission storage in its working directory. They are
 # removed before each start so every run begins from the airframe defaults
 # (NFR5); flight logs (log/*.ulg) are kept.
@@ -78,9 +86,6 @@ def _launch_setup(context):
     model = LaunchConfiguration("model").perform(context)
 
     gz_dir = px4_dir / "Tools" / "simulation" / "gz"
-    gz_sim_launch = (
-        Path(get_package_share_directory("ros_gz_sim")) / "launch" / "gz_sim.launch.py"
-    )
 
     PX4_WORK_DIR.mkdir(parents=True, exist_ok=True)
     for name in PX4_STATE_FILES:
@@ -109,11 +114,22 @@ def _launch_setup(context):
             "GZ_SIM_SERVER_CONFIG_PATH",
             str(px4_dir / "src/modules/simulation/gz_bridge/server.config"),
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(str(gz_sim_launch)),
-            launch_arguments={
-                "gz_args": f"-r {'-s ' if headless else ''}{world}"
-            }.items(),
+        # Server and GUI are started here, as two processes, rather than
+        # through ros_gz_sim's gz_sim.launch.py. That one runs a combined
+        # `gz sim` under a shell: launch's shutdown signals reach the shell
+        # instead of Gazebo, and the server waits for a GUI nobody signals, so
+        # Gazebo outlives the launch whenever the launch ends by itself (e.g.
+        # after a mission) rather than by a terminal Ctrl-C. `gz` execs the
+        # server, so here the launched process is the server itself.
+        ExecuteProcess(
+            name="gazebo",
+            cmd=["gz", "sim", "-s", "-r", world],
+            output="screen",
+        ),
+        *(
+            []
+            if headless
+            else [ExecuteProcess(name="gazebo_gui", cmd=GZ_GUI_CMD, output="screen")]
         ),
         # --- PX4 SITL -------------------------------------------------------
         ExecuteProcess(
