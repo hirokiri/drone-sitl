@@ -1,6 +1,6 @@
 # Drone SITL — Overview Specification
 
-> **Status:** Draft v0.1 · **Last updated:** 2026-11-15
+> **Status:** Draft v0.1 · **Last updated:** 2026-11-17
 >
 > This is the top-level specification for the Drone SITL project. It defines the
 > purpose, scope, architecture, and requirements. Detailed component specs live
@@ -133,7 +133,12 @@ fallback binding):
 
 ### 4.5 Orchestration & tooling — Python (glue)
 - **Mission / scenario control**: arm, take off, run a flight plan via offboard
-  setpoints.
+  setpoints. Implemented by `drone_mission`'s `mission_runner`: it streams a
+  position setpoint (`/fmu/in/trajectory_setpoint`) that slides along each
+  leg of the scenario's plan at the cruise speed, reads PX4's own position
+  estimate back (`/fmu/out/vehicle_local_position_v1`), and hands over to
+  PX4's land mode at the end. Waypoints are relative to where the vehicle
+  stands when the mission starts.
 - **GNSS-loss injector**: programmatically degrade/drop the simulated GNSS on a
   schedule or trigger to create test scenarios.
 - **Logging & metrics**: record estimated vs ground-truth pose, compute error
@@ -271,8 +276,9 @@ drone-sitl/
 > ROS 2, the M0 acceptance check); `drone_mission` — `demo_mission.launch.py`
 > (the `make mission` entry point: brings up the stack and selects a scenario
 > file, `config/demo_mission.yaml`, the first cut of the config-driven scenario
-> format required by NFR5; the mission runner and GNSS-loss injector nodes are
-> not yet implemented).
+> format required by NFR5) and the `mission_runner` node (flies the scenario's
+> plan over offboard control: arm → takeoff → waypoints → land, then exits,
+> which ends the launch; the GNSS-loss injector node is not yet implemented).
 >
 > Until `sim/` is populated, the world and the vehicle model are PX4's own
 > (`default.sdf`, `x500`), taken from the PX4 tree in the image.
@@ -293,7 +299,10 @@ overview:
 1. **M0 — Environment** *(done)* — Podman + Make bring up an empty ROS 2 /
    PX4 / Gazebo stack; drone spawns and can be armed (`make sim`, then
    `make arm-check`).
-2. **M1 — Baseline flight** — Autonomous waypoint mission with GNSS healthy (FR1, FR2).
+2. **M1 — Baseline flight** *(done)* — Autonomous waypoint mission with GNSS
+   healthy (FR2, AC1): `make mission` flies the demo scenario and lands. The
+   camera and LiDAR of FR1 are not on the vehicle yet; they come with the
+   camera-equipped model in M3.
 3. **M2 — GNSS injection** — Controllable GNSS degradation/dropout + logging (FR3, FR7).
 4. **M3 — Visual estimate** — Offline map builder + Rust map-matcher producing a
    global pose against ground-truth (FR4, G6).

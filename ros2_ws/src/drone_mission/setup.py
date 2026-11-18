@@ -21,5 +21,7 @@ setup(
     description="Mission and scenario control for the Drone SITL stack.",
     license="Apache-2.0",
     extras_require={"test": ["pytest"]},
-    entry_points={"console_scripts": []},
+    entry_points={
+        "console_scripts": ["mission_runner = drone_mission.mission_runner:main"],
+    },
 )

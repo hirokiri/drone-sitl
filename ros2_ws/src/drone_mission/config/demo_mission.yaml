@@ -8,10 +8,17 @@ scenario:
   name: demo_gnss_loss
   seed: 42
 
-  # FR2: arm -> takeoff -> waypoints -> land. Positions are NED metres
-  # relative to the home position; `down` is negative above ground.
+  # FR2: arm -> takeoff -> waypoints -> land, flown by mission_runner.
+  # Positions are NED metres relative to the home position (where the vehicle
+  # stands when the mission starts); `down` is negative above ground.
   mission:
     takeoff_altitude_m: 20.0
+    # The position setpoint slides along each leg at this speed; a leg is done
+    # once the vehicle is within the acceptance radius of its end point.
+    cruise_speed_m_s: 5.0
+    acceptance_radius_m: 1.0
+    # Give up (exit 1) if the mission has not landed by then.
+    timeout_s: 300.0
     waypoints_ned_m:
       - [50.0, 0.0, -20.0]
       - [50.0, 50.0, -20.0]
@@ -19,7 +26,8 @@ scenario:
       - [0.0, 0.0, -20.0]
     land_at_home: true
 
-  # G3: consumed by the GNSS-loss injector. Times are seconds after takeoff.
+  # G3: for the GNSS-loss injector (M2, not yet implemented; ignored until
+  # then). Times are seconds after takeoff.
   gnss_loss:
     enabled: true
     start_s: 30.0

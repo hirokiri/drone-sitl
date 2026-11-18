@@ -48,3 +48,8 @@ def test_demo_scenario_is_well_formed():
     gnss = scenario["gnss_loss"]
     assert gnss["start_s"] >= 0 and gnss["duration_s"] > 0
     assert gnss["mode"] in {"dropout", "degrade"}
+
+
+def test_starts_the_mission_runner():
+    ld = _load_launch_module().generate_launch_description()
+    assert any(e.__class__.__name__ == "Node" for e in ld.entities)

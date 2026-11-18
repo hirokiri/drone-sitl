@@ -7,18 +7,26 @@ Usage:
 
 This is the entry point behind `make mission`. It brings up the stack via
 drone_bringup/bringup.launch.py and selects a scenario file (default:
-config/demo_mission.yaml). The mission runner node (arm, take off, fly the
-configured plan over offboard control) and the GNSS-loss injector are not yet
-implemented; this file is where they get added, parameterised from the
-scenario file, so the mission stays reproducible from config (NFR5).
+config/demo_mission.yaml), which the mission runner flies over PX4 offboard
+control: arm, take off, the waypoints, land. The launch shuts down when the
+mission runner exits, so `make mission` ends with the mission. The GNSS-loss
+injector is not yet implemented; this file is where it gets added,
+parameterised from the same scenario file, so the run stays reproducible
+from config (NFR5).
 """
 
 from ament_index_python.packages import get_package_share_directory
 from drone_bringup.sim_config import declare_sim_arguments, sim_argument_names
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    LogInfo,
+    Shutdown,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -47,11 +55,16 @@ def generate_launch_description() -> LaunchDescription:
                     name: LaunchConfiguration(name) for name in sim_argument_names()
                 }.items(),
             ),
-            # --- Mission runner + GNSS-loss injector (not yet implemented) --
-            LogInfo(msg=["Scenario file: ", scenario]),
-            LogInfo(
-                msg="Mission runner not yet implemented (offboard control pending)."
+            # --- Mission runner (arm -> takeoff -> waypoints -> land) -------
+            Node(
+                package="drone_mission",
+                executable="mission_runner",
+                parameters=[{"scenario": scenario}],
+                output="screen",
+                # The mission is what this launch is for: end with it.
+                on_exit=Shutdown(reason="mission runner exited"),
             ),
+            # --- GNSS-loss injector (not yet implemented) -------------------
             LogInfo(
                 msg="GNSS-loss injector not yet implemented (gnss_injector pending)."
             ),

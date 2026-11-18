@@ -12,7 +12,7 @@
 #   make build       # colcon build the ROS 2 workspace
 #   make sim         # launch Gazebo + PX4 SITL + uXRCE-DDS agent
 #   make run         # bring up the full ROS 2 stack
-#   make mission     # run a demo mission
+#   make mission     # fly the demo mission (SCENARIO=<file> for another)
 #   make arm-check   # arm + disarm the running sim's drone from ROS 2
 #   make stop        # stop a running sim/run/mission
 #   make test        # run tests
@@ -86,8 +86,11 @@ sim: ## Launch Gazebo + PX4 SITL + uXRCE-DDS agent
 run: ## Bring up the full ROS 2 stack (sim + perception + estimation)
 	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_bringup bringup.launch.py
 
-mission: ## Run a demo mission (with GNSS-loss scenario)
-	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_mission demo_mission.launch.py
+# SCENARIO=<file> flies another scenario than the demo; LAUNCH_ARGS passes
+# further launch arguments (e.g. LAUNCH_ARGS=headless:=true).
+mission: ## Fly the demo mission: arm, take off, waypoints, land
+	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_mission demo_mission.launch.py \
+		$(if $(SCENARIO),scenario:=$(abspath $(SCENARIO))) $(LAUNCH_ARGS)
 
 arm-check: ## Arm + disarm the running sim's drone from ROS 2
 	$(ROS_ENV) ros2 run drone_bringup arm_check

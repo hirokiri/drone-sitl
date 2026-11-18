@@ -47,9 +47,12 @@ make build
 
 # Launch the simulator only (Gazebo + PX4 SITL + uXRCE-DDS agent) ...
 make sim
-# ... or the full stack, or the demo mission (each includes the simulator;
-# only one of the three can run at a time)
+# ... or the full stack (each of these includes the simulator; only one of
+# the three can run at a time)
 make run
+# ... or fly the demo mission: arm -> takeoff -> waypoints -> land, then the
+# launch exits. The plan is drone_mission/config/demo_mission.yaml; fly
+# another with `make mission SCENARIO=/path/to/scenario.yaml`
 make mission
 
 # With one of those running, in a second shell: arm and disarm the drone
