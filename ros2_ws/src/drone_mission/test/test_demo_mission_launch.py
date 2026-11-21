@@ -32,7 +32,7 @@ def test_declares_scenario_world_and_headless_arguments():
         for arg in ld.entities
         if arg.__class__.__name__ == "DeclareLaunchArgument"
     }
-    assert {"scenario", "world", "headless", "model"} <= names
+    assert {"scenario", "run_dir", "world", "headless", "model"} <= names
 
 
 def test_includes_the_bringup():
@@ -50,6 +50,7 @@ def test_demo_scenario_is_well_formed():
     assert gnss["mode"] in {"dropout", "degrade"}
 
 
-def test_starts_the_mission_runner():
+def test_starts_the_mission_runner_and_the_recorder():
     ld = _load_launch_module().generate_launch_description()
-    assert any(e.__class__.__name__ == "Node" for e in ld.entities)
+    nodes = [e for e in ld.entities if e.__class__.__name__ == "Node"]
+    assert len(nodes) == 2

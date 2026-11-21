@@ -25,19 +25,20 @@ def test_generate_launch_description():
 def test_declares_simulator_arguments_with_config_defaults():
     ld = _load_launch_module().generate_launch_description()
     defaults = {
-        arg.name: arg.default_value[0].text
+        arg.name: arg.default_value[0].text if arg.default_value else ""
         for arg in ld.entities
         if arg.__class__.__name__ == "DeclareLaunchArgument"
     }
-    assert defaults == load_sim_config()
-    assert {"world", "headless", "model"} <= defaults.keys()
+    assert defaults == {**load_sim_config(), "scenario": ""}
+    assert {"world", "headless", "model", "airframe"} <= defaults.keys()
 
 
 def test_sim_config_is_well_formed():
     config = load_sim_config()
     assert config["world"].endswith(".sdf")
     assert config["headless"] in {"true", "false"}
-    assert config["model"].startswith("gz_")
+    assert config["model"] and not config["model"].startswith("gz_")
+    assert config["airframe"].isdigit()
 
 
 def test_startup_script_applies_overrides_after_stock_startup():

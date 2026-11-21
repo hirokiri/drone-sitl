@@ -51,9 +51,12 @@ make sim
 # the three can run at a time)
 make run
 # ... or fly the demo mission: arm -> takeoff -> waypoints -> land, then the
-# launch exits. The plan is drone_mission/config/demo_mission.yaml; fly
-# another with `make mission SCENARIO=/path/to/scenario.yaml`
+# launch exits. The scenario is drone_mission/config/demo_mission.yaml, which
+# drops GNSS 30 s after takeoff; fly another with
+# `make mission SCENARIO=/path/to/scenario.yaml`
 make mission
+# ... then turn the flight it recorded (runs/latest) into metrics and a plot
+make report
 
 # With one of those running, in a second shell: arm and disarm the drone
 # from ROS 2 to check the whole chain (ROS 2 <-> PX4 <-> Gazebo)
@@ -63,11 +66,30 @@ make arm-check
 make stop
 ```
 
-`make sim` starts Gazebo with PX4's default world, spawns PX4's `x500`
-quadrotor and bridges PX4 to ROS 2 (`ros2 topic list` shows `/fmu/in/*` and
-`/fmu/out/*`). Defaults (world, model, PX4 parameter overrides) are in
+`make sim` starts Gazebo with PX4's default world, spawns the `x500_sitl`
+quadrotor (PX4's `x500` with this project's sensor wiring) and bridges PX4 to
+ROS 2 (`ros2 topic list` shows `/fmu/in/*` and `/fmu/out/*`). Defaults (world,
+model, PX4 parameter overrides) are in
 `ros2_ws/src/drone_bringup/config/sim.yaml`. PX4 flight logs (`.ulg`) are
 written to `/tmp/drone-sitl/px4/log` in the container.
+
+### Scenarios and GNSS loss
+
+A scenario file describes a whole run: the mission plan, when and how GNSS is
+taken away, and the RNG seed. Three ship in
+`ros2_ws/src/drone_mission/config/`:
+
+| Scenario | GNSS | What happens today |
+|----------|------|--------------------|
+| `demo_mission.yaml` (default) | dropout, 30–70 s after takeoff | PX4 loses its position 5 s into the dropout and lands blind; the mission fails |
+| `degrade_mission.yaml` | noisy, wandering position for the same 40 s | the mission completes, flown metres off the plan |
+| `baseline_mission.yaml` | healthy throughout | the mission completes |
+
+The `gnss_injector` node applies the schedule: the simulated receiver's output
+reaches PX4 only through it. Every `make mission` is recorded to
+`runs/<timestamp>/flight.csv` (PX4's estimate next to simulator ground truth);
+`make report` writes `report.json` and `report.png` next to it, for the last
+run or for `RUN=runs/<dir>`.
 
 PX4, the uXRCE-DDS agent and `px4_msgs` are built into the image. If
 `make sim` reports that PX4 is missing, your image predates them: rebuild it
@@ -92,9 +114,10 @@ A VS Code dev container (`.devcontainer/`) works too: use its terminal.
 
 ```text
 docs/specs/     Specification documents (start with overview.md)
-ros2_ws/src/    ROS 2 packages (Rust perception + Python orchestration)
-sim/            Gazebo worlds and drone/sensor models
+ros2_ws/src/    ROS 2 packages (Rust perception + Python orchestration,
+                Gazebo models and worlds in drone_sim)
 maps/           Offline-built georeferenced feature maps
+runs/           Flight logs and reports of recorded missions (git-ignored)
 tools/          Offline pipelines (e.g. map builder)
 compose.yaml         Podman Compose dev/sim environment
 Containerfile        Dev/sim image (container runtime = source of version truth)
@@ -104,7 +127,7 @@ Makefile             Developer workflow entrypoints (run inside the container)
 scripts/dev.sh       Host-side dev container control (up / shell / exec / down)
 ```
 
-> The `ros2_ws/`, `sim/`, `maps/`, and `tools/` trees are the planned layout
+> The `ros2_ws/`, `maps/`, and `tools/` trees are the planned layout
 > from the spec and are populated as components land — see the
 > [milestones](docs/specs/overview.md#10-milestones-indicative).
 

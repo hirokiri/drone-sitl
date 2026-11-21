@@ -4,16 +4,19 @@
 # Scenario-level settings (GNSS-loss timing, mission plan, RNG seeds) live in
 # drone_mission config, not here.
 
-# Gazebo world file, resolved through GZ_SIM_RESOURCE_PATH (PX4's worlds are
-# on it) or given as a path. The file stem must equal the <world name="...">
-# inside it: PX4 attaches to the world by that name. Replaced by
-# sim/worlds/<name>.sdf once authored.
+# Gazebo world file: one of drone_sim's worlds, one resolvable through
+# GZ_SIM_RESOURCE_PATH (PX4's worlds are on it), or a path. The file stem must
+# equal the <world name="..."> inside it: PX4 attaches to the world by that
+# name.
 world: default.sdf
 headless: false # true -> run gz server only (no GUI), e.g. for CI
 
-# PX4 SITL airframe / Gazebo model: gz_<model> from PX4's
-# Tools/simulation/gz/models. The camera-equipped variant comes with M3.
-model: gz_x500
+# Gazebo model PX4 spawns and flies: a directory of drone_sim's models, or
+# one of PX4's (Tools/simulation/gz/models). x500_sitl is PX4's x500 with the
+# GNSS tap and the ground-truth publisher this stack relies on.
+model: x500_sitl
+# PX4 airframe (SYS_AUTOSTART) flown on that model. 4001 = gz_x500.
+airframe: 4001
 
 # PX4 parameters set at every start, on top of the airframe defaults.
 px4_params:
@@ -21,3 +24,8 @@ px4_params:
   # ROS 2 over uXRCE-DDS. PX4's SITL default (2) refuses to arm without a GCS
   # link; 0 disables the data-link-loss failsafe.
   NAV_DLL_ACT: 0
+  # Gazebo's GNSS arrives without latency. EKF2 by default assumes a real
+  # receiver's 110 ms and shifts each fix that far along the track, which
+  # puts the estimate ahead of the vehicle by 0.11 s of flight (0.55 m at
+  # 5 m/s).
+  EKF2_GPS_DELAY: 0

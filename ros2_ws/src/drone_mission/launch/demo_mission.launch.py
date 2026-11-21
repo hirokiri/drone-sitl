@@ -1,18 +1,19 @@
-"""Run a demo mission on the full stack, with a GNSS-loss scenario.
+"""Fly a scenario on the full stack and record it.
 
 Usage:
     ros2 launch drone_mission demo_mission.launch.py
     ros2 launch drone_mission demo_mission.launch.py scenario:=/path/to/scenario.yaml
-    ros2 launch drone_mission demo_mission.launch.py headless:=true
+    ros2 launch drone_mission demo_mission.launch.py headless:=true run_dir:=runs/x
 
 This is the entry point behind `make mission`. It brings up the stack via
 drone_bringup/bringup.launch.py and selects a scenario file (default:
-config/demo_mission.yaml), which the mission runner flies over PX4 offboard
-control: arm, take off, the waypoints, land. The launch shuts down when the
-mission runner exits, so `make mission` ends with the mission. The GNSS-loss
-injector is not yet implemented; this file is where it gets added,
-parameterised from the same scenario file, so the run stays reproducible
-from config (NFR5).
+config/demo_mission.yaml). The one file drives the whole run, so it stays
+reproducible from config (NFR5): the mission runner flies its plan over PX4
+offboard control (arm, take off, the waypoints, land) and the GNSS injector,
+part of the simulator bring-up, applies its GNSS-loss schedule. The flight
+recorder logs PX4's estimate next to ground truth into `run_dir`. The launch
+shuts down when the mission runner exits, so `make mission` ends with the
+mission.
 """
 
 from ament_index_python.packages import get_package_share_directory
@@ -21,7 +22,6 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
-    LogInfo,
     Shutdown,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -41,13 +41,14 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
+            # Pass-through simulator arguments (defaults: drone_bringup sim.yaml),
+            # including the scenario, which here defaults to the demo.
+            *declare_sim_arguments(scenario_default=default_scenario),
             DeclareLaunchArgument(
-                "scenario",
-                default_value=default_scenario,
-                description="Scenario YAML (mission plan, GNSS-loss schedule, seed).",
+                "run_dir",
+                default_value="runs/latest",
+                description="Directory the flight log of this run is written to.",
             ),
-            # Pass-through simulator arguments (defaults: drone_bringup sim.yaml).
-            *declare_sim_arguments(),
             # --- Full stack (sim + perception + estimation) -----------------
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(bringup_launch),
@@ -64,9 +65,12 @@ def generate_launch_description() -> LaunchDescription:
                 # The mission is what this launch is for: end with it.
                 on_exit=Shutdown(reason="mission runner exited"),
             ),
-            # --- GNSS-loss injector (not yet implemented) -------------------
-            LogInfo(
-                msg="GNSS-loss injector not yet implemented (gnss_injector pending)."
+            # --- Flight recorder (estimate vs ground truth) -----------------
+            Node(
+                package="drone_eval",
+                executable="flight_recorder",
+                parameters=[{"run_dir": LaunchConfiguration("run_dir")}],
+                output="screen",
             ),
         ]
     )

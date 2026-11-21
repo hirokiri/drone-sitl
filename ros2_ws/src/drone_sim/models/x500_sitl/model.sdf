@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The vehicle flown by Drone SITL: PX4's x500 quadrotor with this project's
+  sensor wiring.
+
+  * GNSS tap. The NavSat sensor publishes on /navsat_raw instead of the topic
+    PX4's gz_bridge listens on. The gnss_injector node relays it to PX4 and
+    can drop or degrade it on the way, like a fault on the receiver's wire.
+    Without that node running PX4 gets no GNSS at all.
+  * Ground truth. The exact world pose is published on
+    /sim/ground_truth/odometry for evaluation only. The topics are named
+    explicitly: on the plugin's default topic PX4 would pick the pose up as
+    an external-vision measurement.
+-->
+<sdf version="1.9" xmlns:experimental="http://sdformat.org/schemas/experimental">
+  <model name="x500_sitl">
+    <self_collide>false</self_collide>
+    <include merge="true">
+      <uri>model://x500</uri>
+      <experimental:params>
+        <!-- A copy of x500_base's sensor, plus <topic>. -->
+        <sensor element_id="base_link::navsat_sensor" action="replace"
+                name="navsat_sensor" type="navsat">
+          <gz_frame_id>base_link</gz_frame_id>
+          <always_on>1</always_on>
+          <update_rate>30</update_rate>
+          <topic>navsat_raw</topic>
+        </sensor>
+      </experimental:params>
+    </include>
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <odom_topic>/sim/ground_truth/odometry</odom_topic>
+      <odom_covariance_topic>/sim/ground_truth/odometry_with_covariance</odom_covariance_topic>
+      <tf_topic>/sim/ground_truth/tf</tf_topic>
+    </plugin>
+  </model>
+</sdf>

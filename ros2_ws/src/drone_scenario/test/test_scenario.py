@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from drone_mission.scenario import ScenarioError, load_scenario, parse_scenario
+from drone_scenario.scenario import ScenarioError, load_scenario, parse_scenario
 
-SCENARIO_FILE = Path(__file__).resolve().parents[1] / "config" / "demo_mission.yaml"
+SCENARIOS = Path(__file__).resolve().parents[2] / "drone_mission" / "config"
+SCENARIO_FILE = SCENARIOS / "demo_mission.yaml"
 
 
 def _demo() -> dict:
@@ -68,5 +69,56 @@ def test_rejects_unusable_values(key, value):
 def test_rejects_missing_keys(key):
     data = copy.deepcopy(_demo())
     del data["scenario"]["mission"][key]
+    with pytest.raises(ScenarioError):
+        parse_scenario(data)
+
+
+@pytest.mark.parametrize("path", sorted(SCENARIOS.glob("*.yaml")), ids=lambda p: p.stem)
+def test_every_shipped_scenario_loads(path):
+    scenario = load_scenario(path)
+    assert scenario.mission.waypoints_ned_m
+    assert scenario.gnss_loss.mode in {"dropout", "degrade"}
+
+
+def test_demo_scenario_drops_gnss_mid_flight():
+    loss = load_scenario(SCENARIO_FILE).gnss_loss
+    assert loss.enabled and loss.mode == "dropout"
+    assert (loss.start_s, loss.end_s) == (30.0, 70.0)
+    assert not load_scenario(SCENARIOS / "baseline_mission.yaml").gnss_loss.enabled
+
+
+def test_scenario_without_gnss_loss_keeps_gnss():
+    data = _demo()
+    del data["scenario"]["gnss_loss"]
+    assert not parse_scenario(data).gnss_loss.enabled
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("enabled", "yes"),
+        ("start_s", -1.0),
+        ("duration_s", 0),
+        ("mode", "spoof"),
+    ],
+)
+def test_rejects_unusable_gnss_loss(key, value):
+    data = _demo()
+    data["scenario"]["gnss_loss"][key] = value
+    with pytest.raises(ScenarioError):
+        parse_scenario(data)
+
+
+def test_degrade_mode_needs_its_error_model():
+    data = _demo()
+    data["scenario"]["gnss_loss"]["mode"] = "degrade"
+    del data["scenario"]["gnss_loss"]["degrade"]
+    with pytest.raises(ScenarioError):
+        parse_scenario(data)
+    data["scenario"]["gnss_loss"]["degrade"] = {
+        "noise_std_m": 0.0,
+        "bias_std_m": 5.0,
+        "bias_time_constant_s": 0.0,
+    }
     with pytest.raises(ScenarioError):
         parse_scenario(data)

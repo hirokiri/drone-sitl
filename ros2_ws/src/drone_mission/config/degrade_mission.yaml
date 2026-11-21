@@ -1,0 +1,41 @@
+# Degraded-GNSS scenario: the demo mission, with the receiver reporting a
+# wandering, noisy position for part of the flight instead of going silent.
+#
+# Every scenario parameter lives here, not in code (NFR5: GNSS-loss timing,
+# mission plan and seeds are reproducible from config). The schema is a first
+# cut and will be fixed in docs/specs/evaluation.md.
+scenario:
+  name: demo_gnss_degrade
+  seed: 42
+
+  # FR2: arm -> takeoff -> waypoints -> land, flown by mission_runner.
+  # Positions are NED metres relative to the home position (where the vehicle
+  # stands when the mission starts); `down` is negative above ground.
+  mission:
+    takeoff_altitude_m: 20.0
+    # The position setpoint slides along each leg at this speed; a leg is done
+    # once the vehicle is within the acceptance radius of its end point.
+    cruise_speed_m_s: 5.0
+    acceptance_radius_m: 1.0
+    # Give up (exit 1) if the mission has not landed by then.
+    timeout_s: 300.0
+    waypoints_ned_m:
+      - [50.0, 0.0, -20.0]
+      - [50.0, 50.0, -20.0]
+      - [0.0, 50.0, -20.0]
+      - [0.0, 0.0, -20.0]
+    land_at_home: true
+
+  # FR3: applied by gnss_injector. Times are seconds after takeoff, on the
+  # simulation clock.
+  gnss_loss:
+    enabled: true
+    start_s: 30.0
+    duration_s: 40.0
+    # dropout: the receiver goes silent. degrade: it keeps reporting, with
+    # the error below added to its horizontal position.
+    mode: degrade # dropout | degrade
+    degrade:
+      noise_std_m: 1.5 # white noise, per axis
+      bias_std_m: 8.0 # slowly wandering offset, per axis
+      bias_time_constant_s: 20.0

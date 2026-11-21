@@ -7,7 +7,9 @@ Usage (started by `make mission`, or against a running `make sim`):
 arm -> takeoff -> waypoints -> land (FR2). The plan comes from the scenario
 file; positions in it are relative to where the vehicle stands when the
 mission starts. Exits 0 once the vehicle has landed and disarmed, 1 on
-timeout or if PX4 takes control away (failsafe) mid-flight.
+timeout or if PX4 takes control away (failsafe) mid-flight. In that case it
+stays until PX4 has brought the vehicle down and disarmed it, so whatever
+records the run sees the whole of it.
 
 This node is glue: it only tells PX4 where to go. It streams a position
 setpoint that slides along each leg at the plan's cruise speed, and PX4's own
@@ -22,6 +24,7 @@ from pathlib import Path
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from drone_scenario.scenario import Ned, load_scenario
 from px4_msgs.msg import (
     OffboardControlMode,
     TrajectorySetpoint,
@@ -31,8 +34,6 @@ from px4_msgs.msg import (
 )
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-
-from drone_mission.scenario import Ned, load_scenario
 
 # PX4 versions the topics of messages whose definition changed (px4_msgs
 # MESSAGE_VERSION).
@@ -80,6 +81,7 @@ class Phase(Enum):
     ENGAGE = auto()  # switch to offboard mode and arm
     FLY = auto()  # takeoff, waypoints, back over home
     LAND = auto()  # PX4's land mode, until it disarms itself
+    ABORTED = auto()  # PX4 took over (failsafe): watch until it disarms
 
 
 class MissionRunner(Node):
@@ -108,6 +110,7 @@ class MissionRunner(Node):
         self._setpoint: Ned | None = None
         self._legs: tuple[Ned, ...] = ()
         self._leg = 0
+        self._abort_reason = ""
 
         self._offboard_mode_pub = self.create_publisher(
             OffboardControlMode, OFFBOARD_MODE_TOPIC, 10
@@ -197,6 +200,17 @@ class MissionRunner(Node):
         self.get_logger().error(f"Mission failed: {reason}")
         self.result = False
 
+    def _abort(self, reason: str) -> None:
+        """PX4 has taken control away: stop commanding, keep watching."""
+        self.get_logger().error(
+            f"Mission aborted {self._flight_time_s():.0f} s into the run: {reason}"
+        )
+        self._abort_reason = reason
+        self._phase = Phase.ABORTED
+
+    def _flight_time_s(self) -> float:
+        return (self._now_ns() - self._start_ns) / 1e9
+
     def _step(self) -> None:
         if self.result is not None:
             return
@@ -211,11 +225,23 @@ class MissionRunner(Node):
         if status is None:
             self._wait(f"{STATUS_TOPIC} (is the simulator running?)")
             return
-        if position is None:
-            self._wait("a valid local position estimate")
-            return
         armed = status.arming_state == VehicleStatus.ARMING_STATE_ARMED
         offboard = status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD
+
+        if self._phase is Phase.ABORTED:
+            # No setpoints: PX4's failsafe is flying. The run is over once it
+            # has put the vehicle down.
+            self._wait("PX4's failsafe to land and disarm the vehicle")
+            if not armed:
+                self._fail(f"{self._abort_reason} The vehicle is down and disarmed.")
+            return
+        if position is None:
+            if self._phase in (Phase.FLY, Phase.LAND):
+                # Without a position there is nothing left to navigate by.
+                self._abort("PX4 lost its position estimate in flight.")
+            else:
+                self._wait("a valid local position estimate")
+            return
 
         if self._phase is Phase.WAIT_READY:
             # Hold the setpoint on the vehicle while PX4 gets ready.
@@ -257,7 +283,7 @@ class MissionRunner(Node):
 
         elif self._phase is Phase.FLY:
             if not (armed and offboard):
-                self._fail(
+                self._abort(
                     "PX4 left offboard mode or disarmed in flight "
                     f"(nav_state={status.nav_state}, failsafe={status.failsafe})."
                 )

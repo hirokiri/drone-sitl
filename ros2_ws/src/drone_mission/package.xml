@@ -8,6 +8,8 @@
   <license>Apache-2.0</license>
 
   <exec_depend>drone_bringup</exec_depend>
+  <exec_depend>drone_eval</exec_depend>
+  <exec_depend>drone_scenario</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>px4_msgs</exec_depend>

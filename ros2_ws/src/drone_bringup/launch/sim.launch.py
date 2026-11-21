@@ -3,6 +3,7 @@
 Usage:
     ros2 launch drone_bringup sim.launch.py
     ros2 launch drone_bringup sim.launch.py headless:=true world:=default.sdf
+    ros2 launch drone_bringup sim.launch.py scenario:=/path/to/scenario.yaml
 
 These processes are started:
 
@@ -12,7 +13,12 @@ These processes are started:
 * PX4 SITL in standalone mode: it waits for the Gazebo world, spawns the
   vehicle model into it and runs the autopilot against it;
 * the Micro XRCE-DDS agent, which exposes PX4's uORB topics to ROS 2 as
-  /fmu/in/* and /fmu/out/* (px4_msgs).
+  /fmu/in/* and /fmu/out/* (px4_msgs);
+* the GNSS injector, which carries the simulated GNSS receiver's output to
+  PX4 and drops or degrades it as the scenario says (no scenario: GNSS stays
+  healthy). The vehicle model's GNSS reaches PX4 only through this node;
+* a ros_gz bridge that brings the simulator's ground-truth pose into ROS 2
+  as /sim/ground_truth/odometry, for evaluation only.
 
 PX4, the agent and px4_msgs are installed by the Containerfile; PX4_DIR (set
 there) says where. Argument defaults come from config/sim.yaml.
@@ -31,8 +37,17 @@ from launch.actions import (
     Shutdown,
 )
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+import drone_sim
 
 PX4_BUILD = "build/px4_sitl_default"
+# PX4 instance 0 names the model it spawns <model>_0.
+PX4_INSTANCE = 0
+# Simulator ground truth in ROS 2 (evaluation only): the vehicle model
+# publishes its exact world pose on this Gazebo topic, bridged under the same
+# name.
+GROUND_TRUTH_TOPIC = "/sim/ground_truth/odometry"
 # UDP port PX4's uxrce_dds_client connects to (PX4 default, UXRCE_DDS_PRT).
 XRCE_AGENT_PORT = "8888"
 # The Gazebo GUI, as a process launch can stop. `gz sim -g` runs the actual
@@ -84,8 +99,21 @@ def _launch_setup(context):
     world = LaunchConfiguration("world").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     model = LaunchConfiguration("model").perform(context)
+    airframe = LaunchConfiguration("airframe").perform(context)
+    scenario = LaunchConfiguration("scenario").perform(context)
 
     gz_dir = px4_dir / "Tools" / "simulation" / "gz"
+    # This project's assets take precedence over PX4's of the same name.
+    own_world = drone_sim.worlds_dir() / world
+    if own_world.is_file():
+        world = str(own_world)
+    world_name = Path(world).stem
+    models_dir = (
+        drone_sim.models_dir()
+        if (drone_sim.models_dir() / model / "model.sdf").is_file()
+        else gz_dir / "models"
+    )
+    model_name = f"{model}_{PX4_INSTANCE}"
 
     PX4_WORK_DIR.mkdir(parents=True, exist_ok=True)
     for name in PX4_STATE_FILES:
@@ -102,7 +130,8 @@ def _launch_setup(context):
         # PX4 comes up without a compass or barometer and refuses to arm.
         SetEnvironmentVariable("GZ_IP", "127.0.0.1"),
         AppendEnvironmentVariable(
-            "GZ_SIM_RESOURCE_PATH", f"{gz_dir / 'models'}:{gz_dir / 'worlds'}"
+            "GZ_SIM_RESOURCE_PATH",
+            f"{drone_sim.models_dir()}:{gz_dir / 'models'}:{gz_dir / 'worlds'}",
         ),
         AppendEnvironmentVariable(
             "GZ_SIM_SYSTEM_PLUGIN_PATH",
@@ -146,8 +175,12 @@ def _launch_setup(context):
             additional_env={
                 # Gazebo is started above; PX4 only attaches and spawns.
                 "PX4_GZ_STANDALONE": "1",
-                "PX4_GZ_WORLD": Path(world).stem,
-                "PX4_SIM_MODEL": model,
+                "PX4_GZ_WORLD": world_name,
+                # PX4 spawns <PX4_GZ_MODELS>/<model>/model.sdf; the airframe
+                # is given by number because our model's name matches none.
+                "PX4_GZ_MODELS": str(models_dir),
+                "PX4_SIM_MODEL": f"gz_{model}",
+                "PX4_SYS_AUTOSTART": airframe,
             },
             output="screen",
             # Without the autopilot the rest of the stack is useless.
@@ -157,6 +190,23 @@ def _launch_setup(context):
         ExecuteProcess(
             name="xrce_agent",
             cmd=["MicroXRCEAgent", "udp4", "-p", XRCE_AGENT_PORT],
+            output="log",
+        ),
+        # --- GNSS receiver -> PX4, with scenario-driven loss ----------------
+        Node(
+            package="gnss_injector",
+            executable="gnss_injector",
+            parameters=[
+                {"scenario": scenario, "world": world_name, "model": model_name}
+            ],
+            output="screen",
+        ),
+        # --- Ground truth -> ROS 2 (evaluation only) ------------------------
+        Node(
+            package="ros_gz_bridge",
+            executable="parameter_bridge",
+            name="ground_truth_bridge",
+            arguments=[f"{GROUND_TRUTH_TOPIC}@nav_msgs/msg/Odometry[gz.msgs.Odometry"],
             output="log",
         ),
     ]

@@ -13,6 +13,7 @@
 #   make sim         # launch Gazebo + PX4 SITL + uXRCE-DDS agent
 #   make run         # bring up the full ROS 2 stack
 #   make mission     # fly the demo mission (SCENARIO=<file> for another)
+#   make report      # metrics + plot of the last mission (RUN=<dir> for another)
 #   make arm-check   # arm + disarm the running sim's drone from ROS 2
 #   make stop        # stop a running sim/run/mission
 #   make test        # run tests
@@ -79,7 +80,13 @@ SIM_GUARD = if ps -eo stat=,comm= | awk '$$1 !~ /^Z/ && ($$2 == "gz-sim-main" ||
 LAUNCH_RE = ^/usr/bin/python3 /opt/ros/[^ ]*/bin/ros2 launch
 SIM_RE    = ^(/opt/ros/[^ ]*/gz-sim-|[^ ]*/bin/px4 |MicroXRCEAgent )
 
-.PHONY: sim run mission arm-check stop
+# Each mission is recorded into a directory of its own under runs/, named
+# after the time it started; RUN=<dir> chooses another. runs/latest points at
+# the most recent one.
+RUNS_DIR ?= runs
+RUN      ?= $(RUNS_DIR)/$(shell date +%Y%m%d-%H%M%S)
+
+.PHONY: sim run mission report arm-check stop
 sim: ## Launch Gazebo + PX4 SITL + uXRCE-DDS agent
 	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_bringup sim.launch.py
 
@@ -89,8 +96,13 @@ run: ## Bring up the full ROS 2 stack (sim + perception + estimation)
 # SCENARIO=<file> flies another scenario than the demo; LAUNCH_ARGS passes
 # further launch arguments (e.g. LAUNCH_ARGS=headless:=true).
 mission: ## Fly the demo mission: arm, take off, waypoints, land
-	$(ROS_ENV) $(SIM_GUARD) ros2 launch drone_mission demo_mission.launch.py \
+	$(ROS_ENV) $(SIM_GUARD) mkdir -p $(RUN) && ln -sfn $(abspath $(RUN)) $(RUNS_DIR)/latest && \
+	ros2 launch drone_mission demo_mission.launch.py run_dir:=$(abspath $(RUN)) \
 		$(if $(SCENARIO),scenario:=$(abspath $(SCENARIO))) $(LAUNCH_ARGS)
+
+# The last mission unless RUN=<dir> is given.
+report: ## Metrics + plot of a recorded mission (RUN=<dir>; default: the last)
+	$(ROS_ENV) ros2 run drone_eval report $(if $(filter command line,$(origin RUN)),$(RUN),$(RUNS_DIR)/latest)
 
 arm-check: ## Arm + disarm the running sim's drone from ROS 2
 	$(ROS_ENV) ros2 run drone_bringup arm_check

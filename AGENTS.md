@@ -34,7 +34,7 @@ the source of truth for scope, architecture, and requirements.
 ## Working conventions
 
 - **Build & run through the `Makefile`** (`make build`, `make sim`, `make run`,
-  `make arm-check`, `make test`) **inside the dev container** — the Makefile refuses to run on
+  `make mission`, `make report`, `make arm-check`, `make test`) **inside the dev container** — the Makefile refuses to run on
   the host. From the host, use `scripts/dev.sh exec make <target>` (or
   `scripts/dev.sh shell`). Container lifecycle and GUI wiring live in
   `scripts/dev.sh`, not in make. Don't assume host-installed ROS 2 / Gazebo /

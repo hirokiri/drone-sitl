@@ -1,8 +1,11 @@
 """Simulation launch defaults, loaded from config/sim.yaml.
 
 The launch files of this repo expose the same simulator arguments (world,
-headless, model). They all take their defaults from here so the values live in
-one config file instead of being repeated as literals in each launch file.
+headless, model, airframe). They all take their defaults from here so the
+values live in one config file instead of being repeated as literals in each
+launch file. `scenario` rides along with them: it has no default in sim.yaml
+(no scenario means GNSS stays healthy), but every launch file passes it down
+to the simulator, where the GNSS-loss injector reads it.
 """
 
 from pathlib import Path
@@ -15,8 +18,10 @@ _DESCRIPTIONS = {
     "world": "Gazebo world file (name resolvable by gz, or a path). "
     "The file stem must equal the world name inside it.",
     "headless": "Run the Gazebo server only, without the GUI.",
-    "model": "PX4 SITL airframe / Gazebo model, as gz_<model>.",
+    "model": "Gazebo model PX4 spawns (drone_sim's or PX4's model directory).",
+    "airframe": "PX4 airframe (SYS_AUTOSTART) flown on the model.",
 }
+SCENARIO_ARGUMENT = "scenario"
 
 
 def _load() -> tuple[Path, dict]:
@@ -46,17 +51,28 @@ def load_sim_config() -> dict[str, str]:
     }
 
 
-def declare_sim_arguments() -> list[DeclareLaunchArgument]:
-    """Declare the simulator launch arguments with defaults from sim.yaml."""
+def declare_sim_arguments(scenario_default="") -> list[DeclareLaunchArgument]:
+    """Declare the simulator launch arguments with defaults from sim.yaml.
+
+    `scenario_default` is the scenario file used when none is given; empty
+    means no scenario (GNSS stays healthy).
+    """
     defaults = load_sim_config()
     return [
+        *(
+            DeclareLaunchArgument(
+                name, default_value=defaults[name], description=_DESCRIPTIONS[name]
+            )
+            for name in _DESCRIPTIONS
+        ),
         DeclareLaunchArgument(
-            name, default_value=defaults[name], description=_DESCRIPTIONS[name]
-        )
-        for name in _DESCRIPTIONS
+            SCENARIO_ARGUMENT,
+            default_value=scenario_default,
+            description="Scenario YAML (mission plan, GNSS-loss schedule, seed).",
+        ),
     ]
 
 
 def sim_argument_names() -> list[str]:
     """Names of the simulator launch arguments, for pass-through includes."""
-    return list(_DESCRIPTIONS)
+    return [*_DESCRIPTIONS, SCENARIO_ARGUMENT]

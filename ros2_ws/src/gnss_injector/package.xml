@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gnss_injector</name>
+  <version>0.1.0</version>
+  <description>GNSS-loss injector for Drone SITL: relays the simulated GNSS receiver to PX4 and drops or degrades it on the scenario's schedule (Python glue).</description>
+  <maintainer email="koromo.tani.e@gmail.com">hirokiri</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>drone_scenario</exec_depend>
+  <exec_depend>gz_msgs_vendor</exec_depend>
+  <exec_depend>gz_transport_vendor</exec_depend>
+  <exec_depend>px4_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

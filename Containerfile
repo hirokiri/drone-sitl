@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build bc curl wget ca-certificates \
         git gh openssh-client tmux \
         python3-pip python3-venv python-is-python3 \
+        python3-matplotlib \
         libclang-dev pkg-config libssl-dev \
         ros-lyrical-ros-gz \
         ros-lyrical-rmw-cyclonedds-cpp \

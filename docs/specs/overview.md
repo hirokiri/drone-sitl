@@ -1,6 +1,6 @@
 # Drone SITL — Overview Specification
 
-> **Status:** Draft v0.1 · **Last updated:** 2026-11-17
+> **Status:** Draft v0.1 · **Last updated:** 2026-11-21
 >
 > This is the top-level specification for the Drone SITL project. It defines the
 > purpose, scope, architecture, and requirements. Detailed component specs live
@@ -103,7 +103,12 @@ position and continue its mission.
     map-matching
   - **LiDAR** (obstacle/altitude sensing; reserved for later obstacle avoidance)
   - **IMU** and **barometer** (fused by EKF2)
-- Publishes **ground-truth pose** for evaluation only (never fed to the estimator).
+- Publishes **ground-truth pose** for evaluation only (never fed to the
+  estimator): the vehicle model's exact world pose, bridged into ROS 2 as
+  `/sim/ground_truth/odometry`.
+- The vehicle model is `drone_sim`'s `x500_sitl`: PX4's `x500` with its NavSat
+  sensor moved to a tap topic (`/navsat_raw`), so that the simulated GNSS
+  reaches PX4 only through the GNSS-loss injector ([§4.5](#45-orchestration--tooling--python-glue)).
 
 ### 4.2 Flight stack — PX4 SITL
 - Runs the PX4 autopilot as a process inside the dev container (SITL),
@@ -139,10 +144,20 @@ fallback binding):
   estimate back (`/fmu/out/vehicle_local_position_v1`), and hands over to
   PX4's land mode at the end. Waypoints are relative to where the vehicle
   stands when the mission starts.
-- **GNSS-loss injector**: programmatically degrade/drop the simulated GNSS on a
-  schedule or trigger to create test scenarios.
-- **Logging & metrics**: record estimated vs ground-truth pose, compute error
-  metrics, and produce plots/reports.
+- **GNSS-loss injector** (`gnss_injector`): sits on the wire between the
+  simulated GNSS receiver and PX4. It relays the receiver's Gazebo topic to
+  the one PX4's `gz_bridge` reads, and on the scenario's schedule (seconds
+  after takeoff, on the simulation clock) forwards nothing (`dropout`) or adds
+  a seeded noise + wandering-bias position error (`degrade`). Its current
+  mode is published on `/gnss_injector/mode`. It is part of the simulator
+  bring-up: without a scenario it only relays.
+- **Scenario format** (`drone_scenario`): the one YAML file that describes a
+  run (mission plan, GNSS-loss schedule, seed), parsed and validated in one
+  place for every node that reads it.
+- **Logging & metrics** (`drone_eval`): `flight_recorder` logs PX4's position
+  estimate next to ground truth and the injector's mode to
+  `runs/<run>/flight.csv`; `report` turns a log into error metrics
+  (overall, before / during / after the GNSS loss) and a plot.
 - **Launch files** that bring up the whole stack.
 
 ### 4.6 Map builder (offline)
@@ -218,8 +233,8 @@ The environment has **two layers with a deliberate boundary**:
 - **Rust — `rust-toolchain.toml`** pins the Rust version; `rustup` honors it
   both for the in-container `colcon` build and for host-side `rust-analyzer`.
 - **`Makefile`** exposes the common workflow as memorable targets, e.g.
-  `make build`, `make sim`, `make run`, `make arm-check`, `make test`,
-  `make fmt`, `make clean`.
+  `make build`, `make sim`, `make run`, `make mission`, `make report`,
+  `make arm-check`, `make test`, `make fmt`, `make clean`.
   It runs **inside the dev container only**; on the host it stops and prints
   how to get in.
 - **`scripts/dev.sh`** is the host-side entry point: it builds and starts the
@@ -253,35 +268,47 @@ drone-sitl/
 ├── ros2_ws/                 # ROS 2 workspace
 │   └── src/
 │       ├── drone_bringup/       # (Python) launch files, params
-│       ├── drone_mission/       # (Python) mission & scenario control
+│       ├── drone_sim/           # (assets) Gazebo models & worlds
+│       ├── drone_scenario/      # (Python) scenario file format
+│       ├── drone_mission/       # (Python) mission control, scenario files
 │       ├── gnss_injector/       # (Python) GNSS degradation/dropout
 │       ├── visual_matcher/      # (Rust)   map-matching estimator
 │       ├── perception_common/   # (Rust)   feature extraction, shared types
 │       └── drone_eval/          # (Python) logging, metrics, plotting
 ├── maps/                    # Offline-built georeferenced feature maps (artifacts)
-├── tools/
-│   └── map_builder/         # Offline map-building pipeline
-└── sim/
-    ├── worlds/              # Gazebo worlds
-    └── models/              # Drone & sensor models
+├── runs/                    # Flight logs and reports of recorded missions (git-ignored)
+└── tools/
+    └── map_builder/         # Offline map-building pipeline
 ```
 
-> The layout is a proposal to be confirmed as components are specified. So far
-> two packages exist:
-> `drone_bringup` — `sim.launch.py` (starts the Gazebo server and GUI, PX4 SITL
-> and the uXRCE-DDS agent; defaults in `config/sim.yaml`),
-> `bringup.launch.py` (the `make run` entry point: includes the simulator and
-> is where the perception and estimation stacks get composed as they land) and
-> the `arm_check` node (`make arm-check`: arms and disarms the vehicle over
-> ROS 2, the M0 acceptance check); `drone_mission` — `demo_mission.launch.py`
-> (the `make mission` entry point: brings up the stack and selects a scenario
-> file, `config/demo_mission.yaml`, the first cut of the config-driven scenario
-> format required by NFR5) and the `mission_runner` node (flies the scenario's
-> plan over offboard control: arm → takeoff → waypoints → land, then exits,
-> which ends the launch; the GNSS-loss injector node is not yet implemented).
+> Two deviations from the first proposal, both so that launch files and nodes
+> find things through the ament index instead of repo-relative paths: Gazebo
+> models and worlds live in the `drone_sim` package rather than a top-level
+> `sim/` tree, and the scenario format has a package of its own
+> (`drone_scenario`) because both `drone_mission` and `gnss_injector` (which
+> `drone_bringup` starts) read it.
 >
-> Until `sim/` is populated, the world and the vehicle model are PX4's own
-> (`default.sdf`, `x500`), taken from the PX4 tree in the image.
+> Packages that exist so far:
+> `drone_bringup` — `sim.launch.py` (starts the Gazebo server and GUI, PX4
+> SITL, the uXRCE-DDS agent, the GNSS injector and the ground-truth bridge;
+> defaults in `config/sim.yaml`), `bringup.launch.py` (the `make run` entry
+> point: includes the simulator and is where the perception and estimation
+> stacks get composed as they land) and the `arm_check` node (`make
+> arm-check`: arms and disarms the vehicle over ROS 2, the M0 acceptance
+> check); `drone_sim` — the `x500_sitl` vehicle model;
+> `drone_scenario` — the scenario schema (NFR5);
+> `drone_mission` — `demo_mission.launch.py` (the `make mission` entry point:
+> brings up the stack, selects a scenario file and records the run), the
+> scenario files in `config/` (`demo_mission.yaml` drops GNSS mid-flight,
+> `degrade_mission.yaml` degrades it, `baseline_mission.yaml` keeps it
+> healthy) and the `mission_runner` node (flies the scenario's plan over
+> offboard control: arm → takeoff → waypoints → land, then exits, which ends
+> the launch; if PX4's failsafe takes over it waits for the vehicle to be down
+> and exits 1); `gnss_injector` and `drone_eval` — see
+> [§4.5](#45-orchestration--tooling--python-glue).
+>
+> The world is still PX4's own (`default.sdf`), taken from the PX4 tree in the
+> image, until `drone_sim/worlds/` is populated.
 
 ## 9. Detailed specifications
 
@@ -303,7 +330,12 @@ overview:
    healthy (FR2, AC1): `make mission` flies the demo scenario and lands. The
    camera and LiDAR of FR1 are not on the vehicle yet; they come with the
    camera-equipped model in M3.
-3. **M2 — GNSS injection** — Controllable GNSS degradation/dropout + logging (FR3, FR7).
+3. **M2 — GNSS injection** *(done)* — Controllable GNSS degradation/dropout +
+   logging (FR3, FR7): the demo scenario drops GNSS 30 s after takeoff, and
+   `make report` shows the estimate drifting away from ground truth. With
+   nothing to replace GNSS yet, PX4 declares its position invalid 5 s into the
+   dropout and its failsafe lands the vehicle blind — the behaviour M4 has to
+   remove.
 4. **M3 — Visual estimate** — Offline map builder + Rust map-matcher producing a
    global pose against ground-truth (FR4, G6).
 5. **M4 — Fusion** — Visual estimate fused into EKF2; position hold under GNSS
