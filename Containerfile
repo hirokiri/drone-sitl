@@ -113,6 +113,16 @@ WORKDIR /workspace
 COPY rust-toolchain.toml /workspace/rust-toolchain.toml
 RUN rustup show
 
+# --- Node.js (Ubuntu's packaged version) + pnpm ----------------------------
+# For JS-based developer tooling (npx-run MCP servers, linters, ...); not part
+# of the simulation runtime. Its own late layer so that changing it does not
+# invalidate the expensive PX4 / px4_msgs build layers above.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        nodejs npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g pnpm \
+    && npm cache clean --force
+
 # --- Developer tools: mise + Claude Code CLI -------------------------------
 # mise runs the dev tools pinned in mise.toml (pre-commit, shellcheck,
 # yamllint) inside the container as well as on the host. mise.toml must not

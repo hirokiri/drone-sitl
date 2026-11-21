@@ -47,7 +47,7 @@ services:
       - GH_NO_UPDATE_NOTIFIER=1
     volumes:
       # Live-mount the repo so edits on the host a>re reflected inside.
-      - .:/drone-sitl:Z
+      - .:/workspace/drone-sitl:Z
       # Wayland socket for GUI tools. WAYLAND_SOCKET is exported by scripts/dev.sh
       # (host socket path, or empty). Under rootless Podman the container's
       # root is the host user, so the socket is usable without any xhost-style

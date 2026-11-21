@@ -48,8 +48,8 @@ the source of truth for scope, architecture, and requirements.
   container, but `mise.toml` must never pin python or rust.
 - **The dev container reuses host config:** `~/.ssh`, `~/.gitconfig`, git
   credential stores and `~/.claude` are bind-mounted (see `compose.yaml`), and
-  `git`, `gh`, `tmux`, `mise` and the Claude Code CLI are installed in the
-  image.
+  `git`, `gh`, `tmux`, `mise`, Node.js (`node`/`npm`/`pnpm`) and the Claude Code CLI
+  are installed in the image.
 - **Everything crosses node boundaries as ROS 2 topics/services** so it is
   recordable (`ros2 bag`) and introspectable. No hidden side-channels.
 - **Ground-truth from the simulator is for evaluation only** — never feed it

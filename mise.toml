@@ -12,7 +12,6 @@
 [tools]
 pre-commit = "latest"   # git hooks run on the host before committing
 shellcheck = "latest"   # lint shell in Makefile recipes / scripts
-yamllint = "latest"     # lint compose.yaml and CI config
 
 [tasks.setup]
 description = "Install host dev tools and git hooks"
